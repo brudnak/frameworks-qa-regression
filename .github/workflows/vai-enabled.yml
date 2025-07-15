@@ -17,7 +17,7 @@ jobs:
 
       - name: Clone Your Fork and Branch
         run: |
-          git clone -b brudnak-vai-pagesize https://github.com/brudnak/tests.git
+          git clone -b brudnak-more-idx-fields https://github.com/brudnak/tests.git
           cd tests
           # Show current branch to confirm
           git branch --show-current
