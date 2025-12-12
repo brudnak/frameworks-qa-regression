@@ -30,18 +30,9 @@ jobs:
             clusterName: "${{ secrets.CLUSTER_NAME }}"
           EOF
       
-      - name: Run Webhook Tests
-        continue-on-error: true
-        env:
-          CATTLE_TEST_CONFIG: ${{ github.workspace }}/cattle-config.yaml
-        run: |
-          cd tests
-          go test -v -tags=validation,infra.any,cluster.any,stress ./validation/charts -run TestWebhookTestSuite
-      
-      - name: Wait between tests
-        run: sleep 30
       
       - name: Run Token Tests
+        id: token-test
         continue-on-error: true
         env:
           CATTLE_TEST_CONFIG: ${{ github.workspace }}/cattle-config.yaml
@@ -53,6 +44,7 @@ jobs:
         run: sleep 30
       
       - name: Run ConfigMap Tests
+        id: configmap-test
         continue-on-error: true
         env:
           CATTLE_TEST_CONFIG: ${{ github.workspace }}/cattle-config.yaml
@@ -64,6 +56,7 @@ jobs:
         run: sleep 30
       
       - name: Run Schema Changes Tests
+        id: schema-test
         continue-on-error: true
         env:
           CATTLE_TEST_CONFIG: ${{ github.workspace }}/cattle-config.yaml
@@ -75,9 +68,28 @@ jobs:
         run: sleep 30
       
       - name: Run Node Annotations Tests
+        id: node-test
         continue-on-error: true
         env:
           CATTLE_TEST_CONFIG: ${{ github.workspace }}/cattle-config.yaml
         run: |
           cd tests
           go test -v -tags=validation,infra.any,cluster.any ./validation/nodeannotations -run TestNodeAnnotationsTestSuite
+      
+      - name: Check test results
+        if: always()
+        run: |
+          echo "Webhook Tests: ${{ steps.webhook-test.outcome }}"
+          echo "Token Tests: ${{ steps.token-test.outcome }}"
+          echo "ConfigMap Tests: ${{ steps.configmap-test.outcome }}"
+          echo "Schema Tests: ${{ steps.schema-test.outcome }}"
+          echo "Node Annotations Tests: ${{ steps.node-test.outcome }}"
+          
+          if [[ "${{ steps.webhook-test.outcome }}" == "failure" ]] || \
+             [[ "${{ steps.token-test.outcome }}" == "failure" ]] || \
+             [[ "${{ steps.configmap-test.outcome }}" == "failure" ]] || \
+             [[ "${{ steps.schema-test.outcome }}" == "failure" ]] || \
+             [[ "${{ steps.node-test.outcome }}" == "failure" ]]; then
+            echo "One or more tests failed"
+            exit 1
+          fi
