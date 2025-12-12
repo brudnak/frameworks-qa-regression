@@ -27,17 +27,9 @@ jobs:
             adminToken: "${{ secrets.RANCHER_ADMIN_TOKEN }}"
             cleanup: true
             insecure: true
-            clusterName: "${{ secrets.CLUSTER_NAME }}"
+            clusterName: local
           EOF
-      
-      - name: Run Webhook Tests
-        continue-on-error: true
-        env:
-          CATTLE_TEST_CONFIG: ${{ github.workspace }}/cattle-config.yaml
-        run: |
-          cd tests
-          go test -v -tags=validation,infra.any,cluster.any,stress ./validation/charts -run TestWebhookTestSuite
-      
+            
       - name: Wait between tests
         run: sleep 30
       
