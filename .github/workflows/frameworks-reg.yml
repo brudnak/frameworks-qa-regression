@@ -30,7 +30,19 @@ jobs:
             clusterName: "${{ secrets.CLUSTER_NAME }}"
           EOF
       
+      - name: Run Webhook Tests
+        id: webhook-test
+        continue-on-error: true
+        env:
+          CATTLE_TEST_CONFIG: ${{ github.workspace }}/cattle-config.yaml
+        run: |
+          cd tests
+          go test -v -tags=validation,infra.any,cluster.any ./validation/charts -run TestWebhookTestSuite
       
+      - name: Wait between tests
+        run: sleep 30
+            
+
       - name: Run Token Tests
         id: token-test
         continue-on-error: true
@@ -38,7 +50,7 @@ jobs:
           CATTLE_TEST_CONFIG: ${{ github.workspace }}/cattle-config.yaml
         run: |
           cd tests
-          go test -v -tags=validation,infra.any,cluster.any ./validation/token -run TestTokenTestSuite
+          go test -v -tags=validation,infra.any,cluster.any ./validation/auth/tokens -run TestTokenTestSuite
       
       - name: Wait between tests
         run: sleep 30
