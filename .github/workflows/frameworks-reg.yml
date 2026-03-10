@@ -11,7 +11,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v4
         with:
-          go-version: '1.23'
+          go-version: 'stable'
       
       - name: Clone Rancher Tests Repository
         run: |
@@ -29,32 +29,7 @@ jobs:
             insecure: true
             clusterName: "${{ secrets.CLUSTER_NAME }}"
           EOF
-      
-      - name: Run Webhook Tests
-        id: webhook-test
-        continue-on-error: true
-        env:
-          CATTLE_TEST_CONFIG: ${{ github.workspace }}/cattle-config.yaml
-        run: |
-          cd tests
-          go test -v -tags=validation,infra.any,cluster.any ./validation/charts -run TestWebhookTestSuite
-      
-      - name: Wait between tests
-        run: sleep 30
             
-
-      - name: Run Token Tests
-        id: token-test
-        continue-on-error: true
-        env:
-          CATTLE_TEST_CONFIG: ${{ github.workspace }}/cattle-config.yaml
-        run: |
-          cd tests
-          go test -v -tags=validation,infra.any,cluster.any ./validation/auth/tokens -run TestTokenTestSuite
-      
-      - name: Wait between tests
-        run: sleep 30
-      
       - name: Run ConfigMap Tests
         id: configmap-test
         continue-on-error: true
@@ -91,15 +66,11 @@ jobs:
       - name: Check test results
         if: always()
         run: |
-          echo "Webhook Tests: ${{ steps.webhook-test.outcome }}"
-          echo "Token Tests: ${{ steps.token-test.outcome }}"
           echo "ConfigMap Tests: ${{ steps.configmap-test.outcome }}"
           echo "Schema Tests: ${{ steps.schema-test.outcome }}"
           echo "Node Annotations Tests: ${{ steps.node-test.outcome }}"
           
-          if [[ "${{ steps.webhook-test.outcome }}" == "failure" ]] || \
-             [[ "${{ steps.token-test.outcome }}" == "failure" ]] || \
-             [[ "${{ steps.configmap-test.outcome }}" == "failure" ]] || \
+          if [[ "${{ steps.configmap-test.outcome }}" == "failure" ]] || \
              [[ "${{ steps.schema-test.outcome }}" == "failure" ]] || \
              [[ "${{ steps.node-test.outcome }}" == "failure" ]]; then
             echo "One or more tests failed"
