@@ -1,0 +1,89 @@
+import { getServerSession } from "next-auth";
+import { SignInButton } from "@/components/sign-in-button";
+import { SignOutButton } from "@/components/sign-out-button";
+import { LauncherDashboard } from "@/components/launcher-dashboard";
+import { authOptions } from "@/lib/auth";
+import { isAuthorizedUser } from "@/lib/authz";
+import { getDashboardData } from "@/lib/github";
+
+export const dynamic = "force-dynamic";
+
+export default async function Home() {
+  const session = await getServerSession(authOptions);
+  const login = session?.user?.login;
+  const isAuthorized = login ? await isAuthorizedUser(login) : false;
+  const dashboardData = login && isAuthorized ? await getDashboardData() : null;
+
+  return (
+    <main className="page-shell">
+      <section className="hero-panel">
+        <div className="hero-copy">
+          <p className="eyebrow">Rancher QA Launcher</p>
+          <h1>Kick off GitHub Actions runs without digging through repo menus.</h1>
+          <p className="hero-text">
+            Launch framework suites against one of four saved Rancher profiles,
+            tag runs by Rancher version, and see recent results grouped into a
+            cleaner dashboard.
+          </p>
+        </div>
+
+        <div className="auth-panel">
+          {session ? (
+            <>
+              <div>
+                <p className="panel-label">Signed in as</p>
+                <p className="panel-value">
+                  {session.user?.name || session.user?.login || "GitHub user"}
+                </p>
+                <p className="panel-subtle">
+                  @{session.user?.login || "unknown"}
+                </p>
+              </div>
+              <SignOutButton />
+            </>
+          ) : (
+            <>
+              <div>
+                <p className="panel-label">GitHub Sign-In</p>
+                <p className="panel-subtle">
+                  Only approved users can launch runs or update environment
+                  profile secrets.
+                </p>
+              </div>
+              <SignInButton />
+            </>
+          )}
+        </div>
+      </section>
+
+      {!session ? (
+        <section className="empty-state">
+          <h2>Start with GitHub authentication</h2>
+          <p>
+            Sign in with GitHub to see the launch form and reporting view for
+            your Rancher QA workflows.
+          </p>
+        </section>
+      ) : !isAuthorized ? (
+        <section className="empty-state">
+          <h2>Access not approved yet</h2>
+          <p>
+            Your GitHub account is signed in, but it is not currently allowed
+            to use this launcher. Add your username to the allowlist or grant
+            repo access checks for this repository.
+          </p>
+        </section>
+      ) : dashboardData ? (
+        <LauncherDashboard
+          login={login}
+          owner={dashboardData.owner}
+          repo={dashboardData.repo}
+          profiles={dashboardData.profiles}
+          workflows={dashboardData.workflows}
+          recentRuns={dashboardData.recentRuns}
+          versionSummaries={dashboardData.versionSummaries}
+        />
+      ) : null}
+    </main>
+  );
+}

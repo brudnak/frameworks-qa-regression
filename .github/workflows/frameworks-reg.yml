@@ -1,9 +1,32 @@
 name: Run Rancher Test Suite
+run-name: "rv:${{ inputs.rancher_version }} | profile:${{ inputs.profile }} | suite:frameworks-reg"
+
 on:
-  workflow_dispatch:  # Manual trigger for privacy
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: GitHub environment profile to use for Rancher secrets
+        required: true
+        type: string
+      rancher_version:
+        description: Rancher version label for reporting
+        required: true
+        type: string
+      notes:
+        description: Optional launch notes
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
 jobs:
   run-test-suite:
     runs-on: ubuntu-latest
+    environment: ${{ inputs.profile }}
+    concurrency:
+      group: frameworks-reg-${{ inputs.profile }}
+      cancel-in-progress: false
     steps:
       - name: Checkout your repository
         uses: actions/checkout@v3
@@ -29,6 +52,12 @@ jobs:
             insecure: true
             clusterName: "${{ secrets.CLUSTER_NAME }}"
           EOF
+
+      - name: Print run context
+        run: |
+          echo "Profile: ${{ inputs.profile }}"
+          echo "Rancher version: ${{ inputs.rancher_version }}"
+          echo "Notes: ${{ inputs.notes }}"
             
       - name: Run ConfigMap Tests
         id: configmap-test
