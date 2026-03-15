@@ -36,13 +36,10 @@ jobs:
         with:
           go-version: 'stable'
 
-      - name: Clone Your Fork and Branch
+      - name: Clone Rancher Tests Repository
         run: |
-          git clone -b brudnak-more-idx-fields https://github.com/brudnak/tests.git
+          git clone https://github.com/rancher/tests.git
           cd tests
-          # Show current branch to confirm
-          git branch --show-current
-          git log -1 --oneline
 
       - name: Create config file
         run: |
