@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
 :root {
+  color-scheme: dark;
   --background: #07111f;
   --foreground: #ebf5ff;
   --panel: rgba(11, 20, 41, 0.82);
@@ -47,6 +48,7 @@
 }
 
 html[data-theme="light-ranch-house"] {
+  color-scheme: light;
   --background: #f4efe4;
   --foreground: #10221b;
   --panel: rgba(255, 251, 244, 0.82);
@@ -75,6 +77,7 @@ html[data-theme="light-ranch-house"] {
 }
 
 html[data-theme="dark-suse-green"] {
+  color-scheme: dark;
   --background: #08110e;
   --foreground: #e9fff1;
   --panel: rgba(8, 25, 19, 0.82);
@@ -103,6 +106,7 @@ html[data-theme="dark-suse-green"] {
 }
 
 html[data-theme="dark-rancher-blue"] {
+  color-scheme: dark;
   --background: #091323;
   --foreground: #eff7ff;
   --panel: rgba(13, 28, 53, 0.84);
@@ -511,6 +515,12 @@ html:not([data-theme="light-ranch-house"]):not([data-theme="dark-suse-green"]):n
   border-radius: 18px;
   padding: 0.95rem 1rem;
   background: linear-gradient(180deg, var(--panel-strong), var(--surface));
+  color: var(--foreground);
+}
+
+.field-shell select,
+.field-shell option {
+  background-color: color-mix(in srgb, var(--panel-strong) 96%, black 4%);
   color: var(--foreground);
 }
 
