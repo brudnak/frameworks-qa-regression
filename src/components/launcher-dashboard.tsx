@@ -185,6 +185,9 @@ export function LauncherDashboard({
                     </option>
                   ))}
                 </select>
+                <span className="field-help">
+                  Each profile bucket maps to one GitHub Actions environment.
+                </span>
               </label>
 
               <label className="field-shell">
