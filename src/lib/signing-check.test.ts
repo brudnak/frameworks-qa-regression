@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildSimpleSigningPayloadCandidates,
   describeBundleDescriptor,
+  normalizeTagList,
   parseAuthenticateHeader,
   toLegacyAttestationTag,
   toLegacySignatureTag,
@@ -75,6 +76,22 @@ describe("buildSimpleSigningPayloadCandidates", () => {
         },
       }),
     );
+  });
+});
+
+describe("normalizeTagList", () => {
+  it("filters, de-dupes, and sorts version-like tags", () => {
+    expect(
+      normalizeTagList([
+        "latest",
+        "v0.9.2",
+        "v0.10.0-rc.11",
+        "v0.10.0-rc.11",
+        "foo",
+        "v0.9.10",
+        "v0.9.3",
+      ]),
+    ).toEqual(["v0.10.0-rc.11", "v0.9.10", "v0.9.3", "v0.9.2"]);
   });
 });
 

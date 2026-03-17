@@ -13,6 +13,8 @@ type ImageKey = "webhook" | "rdp";
 
 type RegistryName = "docker.io" | "registry.suse.com" | "stgregistry.suse.com";
 
+export type SigningTagSource = RegistryName | "manual";
+
 type Credentials = {
   username: string;
   password: string;
@@ -203,6 +205,18 @@ export function buildSimpleSigningPayloadCandidates(
   return [...candidates.values()];
 }
 
+export function normalizeTagList(tags: string[], limit = 20) {
+  return [...new Set(tags)]
+    .filter((tag) => tag && tag !== "latest" && tag.startsWith("v"))
+    .sort((left, right) =>
+      right.localeCompare(left, undefined, {
+        numeric: true,
+        sensitivity: "base",
+      }),
+    )
+    .slice(0, limit);
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
@@ -285,6 +299,13 @@ export function describeBundleDescriptor(
 
 function cleanDetail(value: string) {
   return value.replace(/\s+/g, " ").trim();
+}
+
+function isMissingBundleMessage(detail: string) {
+  return (
+    detail === "No Sigstore image signature bundles were found." ||
+    detail === "No SPDX SBOM attestation bundles were found."
+  );
 }
 
 function resolveRegistryCredentials(
@@ -507,6 +528,66 @@ class RegistryClient {
 
     return fallback.body as OCIIndex;
   }
+
+  async listTags(limit = 30) {
+    const response = await this.request(`/tags/list?n=${limit}`);
+
+    if (!response) {
+      return [];
+    }
+
+    const payload = (await response.json()) as {
+      tags?: string[];
+    };
+
+    return payload.tags ?? [];
+  }
+}
+
+async function listDockerHubTags(repository: string, limit = 30) {
+  const response = await fetch(
+    `https://hub.docker.com/v2/repositories/${repository}/tags/?page_size=${limit}&ordering=last_updated`,
+  );
+
+  if (!response.ok) {
+    throw new Error(`Unable to load tags from Docker Hub for ${repository}.`);
+  }
+
+  const payload = (await response.json()) as {
+    results?: Array<{
+      name?: string;
+    }>;
+  };
+
+  return (payload.results ?? []).flatMap((tag) => (tag.name ? [tag.name] : []));
+}
+
+function assertRegistrySource(source: string): source is RegistryName {
+  return source === "docker.io" || source === "registry.suse.com" || source === "stgregistry.suse.com";
+}
+
+export function isSigningTagSource(source: string): source is SigningTagSource {
+  return source === "manual" || assertRegistrySource(source);
+}
+
+export async function listAvailableTags(
+  imageKey: ImageKey,
+  source: RegistryName,
+  limit = 20,
+) {
+  const image = IMAGE_CATALOG[imageKey];
+
+  if (source === "docker.io") {
+    return normalizeTagList(await listDockerHubTags(image.image, Math.max(limit, 30)), limit);
+  }
+
+  const client = new RegistryClient(
+    source,
+    image.image,
+    resolveRegistryCredentials(source, image.image),
+  );
+
+  return normalizeTagList(await client.listTags(Math.max(limit, 100)), limit);
 }
 
 async function loadBundleDescriptors(client: RegistryClient, digest: string) {
@@ -689,6 +770,18 @@ async function checkRegistry(
   result.sbom = await verifySbomBundles(loadedBundles, image.identity);
 
   const legacy = await findLegacyTags(client, imageManifest.digest);
+
+  if (!result.signature.ok && isMissingBundleMessage(result.signature.detail)) {
+    result.signature.detail = legacy.hasLegacySignature
+      ? "No Sigstore image signature bundles were found."
+      : "No Sigstore image signature bundles or legacy cosign .sig tags were found.";
+  }
+
+  if (!result.sbom.ok && isMissingBundleMessage(result.sbom.detail)) {
+    result.sbom.detail = legacy.hasLegacyAttestation
+      ? "No SPDX SBOM attestation bundles were found."
+      : "No SPDX SBOM attestation bundles or legacy cosign .att tags were found.";
+  }
 
   if (legacy.hasLegacySignature && !result.signature.ok) {
     result.notes.push(

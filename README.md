@@ -46,6 +46,7 @@ npm run dev
 The dashboard includes an image signing check form that:
 
 - resolves the selected image tag to a digest
+- can load recent version tags from Docker Hub or supported OCI registries
 - queries OCI referrers for Sigstore bundle artifacts
 - verifies keyless image signatures and SPDX SBOM attestations in TypeScript
 

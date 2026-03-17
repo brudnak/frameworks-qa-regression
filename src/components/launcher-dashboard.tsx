@@ -51,9 +51,12 @@ export function LauncherDashboard({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [isSigningPending, startSigningTransition] = useTransition();
+  const [isTagPending, startTagTransition] = useTransition();
   const [banner, setBanner] = useState<BannerState>(null);
   const [signingBanner, setSigningBanner] = useState<BannerState>(null);
+  const [tagBanner, setTagBanner] = useState<BannerState>(null);
   const [signingOutput, setSigningOutput] = useState("");
+  const [availableSigningTags, setAvailableSigningTags] = useState<string[]>([]);
   const [form, setForm] = useState({
     workflowId: workflows[0]?.id ?? "",
     profile: profiles[0] ?? "",
@@ -68,6 +71,7 @@ export function LauncherDashboard({
   });
   const [signingForm, setSigningForm] = useState({
     imageKey: "webhook",
+    tagSource: "manual",
     version: "",
     includeStaging: false,
   });
@@ -150,6 +154,65 @@ export function LauncherDashboard({
         message: "Signing check completed.",
       });
       setSigningOutput(payload.output ?? "");
+    });
+  }
+
+  async function handleLoadSigningTags() {
+    const tagSource = signingForm.tagSource;
+    const imageKey = signingForm.imageKey;
+
+    if (tagSource === "manual") {
+      setTagBanner({
+        kind: "error",
+        message: "Choose Docker Hub, registry.suse.com, or stgregistry.suse.com first.",
+      });
+      return;
+    }
+
+    setTagBanner(null);
+
+    startTagTransition(async () => {
+      const response = await fetch("/api/signing-tags", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          imageKey,
+          source: tagSource,
+        }),
+      });
+
+      const payload = (await response.json()) as {
+        error?: string;
+        tags?: string[];
+      };
+
+      if (!response.ok) {
+        setAvailableSigningTags([]);
+        setTagBanner({
+          kind: "error",
+          message: payload.error ?? "Unable to load available tags right now.",
+        });
+        return;
+      }
+
+      const tags = payload.tags ?? [];
+      setAvailableSigningTags(tags);
+      setTagBanner({
+        kind: "success",
+        message:
+          tags.length > 0
+            ? `Loaded ${tags.length} recent tags from ${tagSource}.`
+            : `No recent version tags were returned from ${tagSource}.`,
+      });
+
+      if (!signingForm.version && tags[0]) {
+        setSigningForm((current) => ({
+          ...current,
+          version: tags[0],
+        }));
+      }
     });
   }
 
@@ -494,12 +557,14 @@ export function LauncherDashboard({
               <span className="field-label">Image</span>
               <select
                 value={signingForm.imageKey}
-                onChange={(event) =>
+                onChange={(event) => {
                   setSigningForm((current) => ({
                     ...current,
                     imageKey: event.target.value,
-                  }))
-                }
+                  }));
+                  setAvailableSigningTags([]);
+                  setTagBanner(null);
+                }}
               >
                 <option value="webhook">webhook (rancher-webhook)</option>
                 <option value="rdp">rdp (remotedialer-proxy)</option>
@@ -520,6 +585,69 @@ export function LauncherDashboard({
               />
             </label>
 
+            <label className="field-shell">
+              <span className="field-label">Tag Source</span>
+              <select
+                value={signingForm.tagSource}
+                onChange={(event) => {
+                  const nextSource = event.target.value;
+                  setSigningForm((current) => ({
+                    ...current,
+                    tagSource: nextSource,
+                  }));
+                  setAvailableSigningTags([]);
+                  setTagBanner(null);
+                }}
+              >
+                <option value="manual">enter manually</option>
+                <option value="docker.io">Docker Hub</option>
+                <option value="registry.suse.com">registry.suse.com (prime)</option>
+                <option value="stgregistry.suse.com">
+                  stgregistry.suse.com (staging)
+                </option>
+              </select>
+            </label>
+
+            <div className="field-shell">
+              <span className="field-label">Recent Tags</span>
+              <div className="inline-action-row">
+                <button
+                  className="ghost-button"
+                  disabled={isTagPending || signingForm.tagSource === "manual"}
+                  onClick={handleLoadSigningTags}
+                  type="button"
+                >
+                  {isTagPending ? "Loading..." : "Load Recent Tags"}
+                </button>
+
+                <select
+                  disabled={availableSigningTags.length === 0}
+                  value={
+                    availableSigningTags.includes(signingForm.version)
+                      ? signingForm.version
+                      : ""
+                  }
+                  onChange={(event) =>
+                    setSigningForm((current) => ({
+                      ...current,
+                      version: event.target.value,
+                    }))
+                  }
+                >
+                  <option value="">
+                    {availableSigningTags.length > 0
+                      ? "Select a loaded tag"
+                      : "Load tags or enter manually"}
+                  </option>
+                  {availableSigningTags.map((tag) => (
+                    <option key={tag} value={tag}>
+                      {tag}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
             <label className="check-shell full-width">
               <input
                 checked={signingForm.includeStaging}
@@ -534,6 +662,10 @@ export function LauncherDashboard({
               <span>Also check `stgregistry.suse.com`</span>
             </label>
           </div>
+
+          {tagBanner ? (
+            <div className={`status-banner ${tagBanner.kind}`}>{tagBanner.message}</div>
+          ) : null}
 
           <div className="button-row" style={{ marginTop: "18px" }}>
             <button className="primary-button" disabled={isSigningPending} type="submit">

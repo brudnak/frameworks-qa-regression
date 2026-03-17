@@ -523,6 +523,13 @@ html:not([data-theme="light-ranch-house"]):not([data-theme="dark-suse-green"]):n
   gap: 14px;
 }
 
+.inline-action-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+}
+
 .check-shell {
   display: inline-flex;
   align-items: center;
