@@ -50,7 +50,10 @@ export function LauncherDashboard({
 }: DashboardProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const [isSigningPending, startSigningTransition] = useTransition();
   const [banner, setBanner] = useState<BannerState>(null);
+  const [signingBanner, setSigningBanner] = useState<BannerState>(null);
+  const [signingOutput, setSigningOutput] = useState("");
   const [form, setForm] = useState({
     workflowId: workflows[0]?.id ?? "",
     profile: profiles[0] ?? "",
@@ -62,6 +65,11 @@ export function LauncherDashboard({
     tenantRancherAdminToken: "",
     tenantClusterName: "",
     notes: "",
+  });
+  const [signingForm, setSigningForm] = useState({
+    imageKey: "webhook",
+    version: "",
+    includeStaging: false,
   });
 
   const topSummary = useMemo(() => versionSummaries.slice(0, 4), [versionSummaries]);
@@ -105,6 +113,43 @@ export function LauncherDashboard({
       }));
 
       router.refresh();
+    });
+  }
+
+  async function handleSigningSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSigningBanner(null);
+    setSigningOutput("");
+
+    startSigningTransition(async () => {
+      const response = await fetch("/api/signing-check", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(signingForm),
+      });
+
+      const payload = (await response.json()) as {
+        error?: string;
+        message?: string;
+        output?: string;
+      };
+
+      if (!response.ok) {
+        setSigningBanner({
+          kind: "error",
+          message: payload.error ?? "Unable to run the signing check right now.",
+        });
+        setSigningOutput(payload.output ?? "");
+        return;
+      }
+
+      setSigningBanner({
+        kind: "success",
+        message: "Signing check completed.",
+      });
+      setSigningOutput(payload.output ?? "");
     });
   }
 
@@ -428,6 +473,85 @@ export function LauncherDashboard({
             </div>
           )}
         </div>
+      </section>
+
+      <section className="panel">
+        <div className="panel-header">
+          <div>
+            <p className="section-label">Signing Check</p>
+            <h3 className="panel-title">Check Rancher image signing</h3>
+            <p className="field-help">
+              This uses a native TypeScript Sigstore verifier, so it can run on
+              Vercel too. Private registries can still need optional server-side
+              credentials.
+            </p>
+          </div>
+        </div>
+
+        <form onSubmit={handleSigningSubmit}>
+          <div className="signing-grid">
+            <label className="field-shell">
+              <span className="field-label">Image</span>
+              <select
+                value={signingForm.imageKey}
+                onChange={(event) =>
+                  setSigningForm((current) => ({
+                    ...current,
+                    imageKey: event.target.value,
+                  }))
+                }
+              >
+                <option value="webhook">webhook (rancher-webhook)</option>
+                <option value="rdp">rdp (remotedialer-proxy)</option>
+              </select>
+            </label>
+
+            <label className="field-shell">
+              <span className="field-label">Version</span>
+              <input
+                placeholder="v0.7.0"
+                value={signingForm.version}
+                onChange={(event) =>
+                  setSigningForm((current) => ({
+                    ...current,
+                    version: event.target.value,
+                  }))
+                }
+              />
+            </label>
+
+            <label className="check-shell full-width">
+              <input
+                checked={signingForm.includeStaging}
+                onChange={(event) =>
+                  setSigningForm((current) => ({
+                    ...current,
+                    includeStaging: event.target.checked,
+                  }))
+                }
+                type="checkbox"
+              />
+              <span>Also check `stgregistry.suse.com`</span>
+            </label>
+          </div>
+
+          <div className="button-row" style={{ marginTop: "18px" }}>
+            <button className="primary-button" disabled={isSigningPending} type="submit">
+              {isSigningPending ? "Running..." : "Run Signing Check"}
+            </button>
+          </div>
+
+          {signingBanner ? (
+            <div className={`status-banner ${signingBanner.kind}`}>
+              {signingBanner.message}
+            </div>
+          ) : null}
+
+          <pre className="terminal-output">
+            {signingOutput ||
+              "No signing check output yet. Choose an image and version, then run the verifier."}
+          </pre>
+        </form>
       </section>
     </section>
   );

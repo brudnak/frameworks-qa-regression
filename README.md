@@ -8,6 +8,9 @@ This repo now contains a Vercel-friendly Next.js app that:
 - dispatches the selected GitHub Actions workflow
 - shows recent workflow history grouped by Rancher version tag
 
+It also includes a browser-triggered image signing check tool that runs through
+native TypeScript Sigstore verification on the server.
+
 ## Local Development
 
 1. Install dependencies:
@@ -37,6 +40,26 @@ Required values:
 ```shell
 npm run dev
 ```
+
+## Signing Check Tool
+
+The dashboard includes an image signing check form that:
+
+- resolves the selected image tag to a digest
+- queries OCI referrers for Sigstore bundle artifacts
+- verifies keyless image signatures and SPDX SBOM attestations in TypeScript
+
+This is Vercel-friendly because it no longer shells out to `cosign` or `crane`.
+If a registry requires auth, you can optionally provide credentials with env
+vars:
+
+- `DOCKER_IO_USERNAME` and `DOCKER_IO_PASSWORD`
+- `REGISTRY_SUSE_USERNAME` and `REGISTRY_SUSE_PASSWORD`
+- `STGREGISTRY_SUSE_USERNAME` and `STGREGISTRY_SUSE_PASSWORD`
+
+If those env vars are absent, the app still tries anonymous access and will
+report when a registry needs credentials. On local development, it also falls
+back to any matching credentials found in `~/.docker/config.json`.
 
 ## GitHub Setup
 
