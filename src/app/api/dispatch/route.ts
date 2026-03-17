@@ -16,6 +16,9 @@ type LaunchRequest = {
   rancherHost?: string;
   rancherAdminToken?: string;
   clusterName?: string;
+  tenantRancherHost?: string;
+  tenantRancherAdminToken?: string;
+  tenantClusterName?: string;
   notes?: string;
 };
 
@@ -65,6 +68,24 @@ export async function POST(request: Request) {
     return badRequest("Cluster name is required.");
   }
 
+  if (workflow.requiresTenantRancher) {
+    if (!body.tenantRancherHost?.trim()) {
+      return badRequest("Tenant Rancher URL is required for the hosted tenant RBAC suite.");
+    }
+
+    if (!body.tenantRancherAdminToken?.trim()) {
+      return badRequest(
+        "Tenant Rancher admin token is required for the hosted tenant RBAC suite.",
+      );
+    }
+
+    if (!body.tenantClusterName?.trim()) {
+      return badRequest(
+        "Tenant Rancher cluster name is required for the hosted tenant RBAC suite.",
+      );
+    }
+  }
+
   const activeRun = await findActiveRunForProfile(body.profile);
 
   if (activeRun) {
@@ -82,6 +103,25 @@ export async function POST(request: Request) {
       body.rancherAdminToken.trim(),
     ),
     setEnvironmentSecret(body.profile, "CLUSTER_NAME", body.clusterName.trim()),
+    ...(workflow.requiresTenantRancher
+      ? [
+          setEnvironmentSecret(
+            body.profile,
+            "TENANT_RANCHER_HOST",
+            body.tenantRancherHost!.trim(),
+          ),
+          setEnvironmentSecret(
+            body.profile,
+            "TENANT_RANCHER_ADMIN_TOKEN",
+            body.tenantRancherAdminToken!.trim(),
+          ),
+          setEnvironmentSecret(
+            body.profile,
+            "TENANT_CLUSTER_NAME",
+            body.tenantClusterName!.trim(),
+          ),
+        ]
+      : []),
   ]);
 
   await dispatchWorkflowRun({

@@ -3,6 +3,7 @@ export type WorkflowDefinition = {
   file: string;
   label: string;
   description: string;
+  requiresTenantRancher?: boolean;
 };
 
 export const workflowDefinitions: WorkflowDefinition[] = [
@@ -17,6 +18,20 @@ export const workflowDefinitions: WorkflowDefinition[] = [
     file: "vai-enabled.yml",
     label: "VAI Enabled",
     description: "Runs the VAI-enabled validation suite.",
+  },
+  {
+    id: "charts-webhook",
+    file: "charts-webhook.yml",
+    label: "Charts Webhook",
+    description: "Runs the webhook chart validation suite.",
+  },
+  {
+    id: "hosted-tenant-rbac",
+    file: "hosted-tenant-rbac.yml",
+    label: "Hosted Tenant RBAC",
+    description:
+      "Runs the hosted tenant RBAC suite and requires tenant Rancher connection details.",
+    requiresTenantRancher: true,
   },
 ];
 

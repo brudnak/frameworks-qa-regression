@@ -58,10 +58,17 @@ export function LauncherDashboard({
     rancherHost: "",
     rancherAdminToken: "",
     clusterName: "",
+    tenantRancherHost: "",
+    tenantRancherAdminToken: "",
+    tenantClusterName: "",
     notes: "",
   });
 
   const topSummary = useMemo(() => versionSummaries.slice(0, 4), [versionSummaries]);
+  const selectedWorkflow = workflows.find(
+    (workflow) => workflow.id === form.workflowId,
+  );
+  const needsTenantRancher = !!selectedWorkflow?.requiresTenantRancher;
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -94,6 +101,7 @@ export function LauncherDashboard({
       setForm((current) => ({
         ...current,
         rancherAdminToken: "",
+        tenantRancherAdminToken: "",
       }));
 
       router.refresh();
@@ -129,8 +137,9 @@ export function LauncherDashboard({
               <p className="section-label">Launch</p>
               <h3 className="panel-title">Queue a workflow run</h3>
               <p className="field-help">
-                Update one profile bucket, then dispatch a GitHub Actions run
-                tagged with the Rancher version you are validating.
+                Update one profile bucket, then dispatch the selected GitHub
+                Actions suite tagged with the Rancher version you are
+                validating.
               </p>
             </div>
           </div>
@@ -154,6 +163,9 @@ export function LauncherDashboard({
                     </option>
                   ))}
                 </select>
+                <span className="field-help">
+                  {selectedWorkflow?.description ?? "Choose the QA suite to launch."}
+                </span>
               </label>
 
               <label className="field-shell">
@@ -190,7 +202,9 @@ export function LauncherDashboard({
               </label>
 
               <label className="field-shell">
-                <span className="field-label">Cluster Name</span>
+                <span className="field-label">
+                  {needsTenantRancher ? "Hosted Cluster Name" : "Cluster Name"}
+                </span>
                 <input
                   placeholder="qa-management-01"
                   value={form.clusterName}
@@ -204,7 +218,9 @@ export function LauncherDashboard({
               </label>
 
               <label className="field-shell full-width">
-                <span className="field-label">Rancher URL</span>
+                <span className="field-label">
+                  {needsTenantRancher ? "Hosted Rancher URL" : "Rancher URL"}
+                </span>
                 <input
                   placeholder="https://rancher.example.com"
                   value={form.rancherHost}
@@ -218,7 +234,11 @@ export function LauncherDashboard({
               </label>
 
               <label className="field-shell full-width">
-                <span className="field-label">Rancher Admin Token</span>
+                <span className="field-label">
+                  {needsTenantRancher
+                    ? "Hosted Rancher Admin Token"
+                    : "Rancher Admin Token"}
+                </span>
                 <input
                   type="password"
                   placeholder="token-abc123"
@@ -231,6 +251,57 @@ export function LauncherDashboard({
                   }
                 />
               </label>
+
+              {needsTenantRancher ? (
+                <>
+                  <label className="field-shell full-width">
+                    <span className="field-label">Tenant Rancher URL</span>
+                    <input
+                      placeholder="https://tenant-rancher.example.com"
+                      value={form.tenantRancherHost}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          tenantRancherHost: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+
+                  <label className="field-shell full-width">
+                    <span className="field-label">Tenant Rancher Admin Token</span>
+                    <input
+                      type="password"
+                      placeholder="token-tenant-abc123"
+                      value={form.tenantRancherAdminToken}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          tenantRancherAdminToken: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+
+                  <label className="field-shell">
+                    <span className="field-label">Tenant Cluster Name</span>
+                    <input
+                      placeholder="local"
+                      value={form.tenantClusterName}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          tenantClusterName: event.target.value,
+                        }))
+                      }
+                    />
+                    <span className="field-help">
+                      This maps to `tenantRanchers.clients[0].clusterName` in
+                      the hosted tenant config.
+                    </span>
+                  </label>
+                </>
+              ) : null}
 
               <label className="field-shell full-width">
                 <span className="field-label">Notes</span>

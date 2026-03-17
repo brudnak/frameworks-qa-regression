@@ -53,11 +53,24 @@ The app writes these environment secrets before each launch:
 - `RANCHER_ADMIN_TOKEN`
 - `CLUSTER_NAME`
 
-Both workflows now accept:
+For the hosted tenant RBAC workflow, the app also writes:
+
+- `TENANT_RANCHER_HOST`
+- `TENANT_RANCHER_ADMIN_TOKEN`
+- `TENANT_CLUSTER_NAME`
+
+All workflows now accept:
 
 - `profile`
 - `rancher_version`
 - `notes`
+
+Available suites in the launcher:
+
+- Frameworks Regression
+- VAI Enabled
+- Charts Webhook
+- Hosted Tenant RBAC
 
 Their run titles are tagged like:
 
