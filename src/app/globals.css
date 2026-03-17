@@ -507,6 +507,16 @@ html:not([data-theme="light-ranch-house"]):not([data-theme="dark-suse-green"]):n
   gap: 8px;
 }
 
+.field-context {
+  display: grid;
+  gap: 4px;
+  margin-top: -2px;
+}
+
+.field-context .field-help {
+  margin: 0;
+}
+
 .field-shell input,
 .field-shell select,
 .field-shell textarea {

@@ -163,9 +163,6 @@ export function LauncherDashboard({
                     </option>
                   ))}
                 </select>
-                <span className="field-help">
-                  {selectedWorkflow?.description ?? "Choose the QA suite to launch."}
-                </span>
               </label>
 
               <label className="field-shell">
@@ -185,10 +182,16 @@ export function LauncherDashboard({
                     </option>
                   ))}
                 </select>
-                <span className="field-help">
-                  Each profile bucket maps to one GitHub Actions environment.
-                </span>
               </label>
+
+              <div className="field-context full-width">
+                <p className="field-help">
+                  {selectedWorkflow?.description ?? "Choose the QA suite to launch."}
+                </p>
+                <p className="field-help">
+                  Each profile bucket maps to one GitHub Actions environment.
+                </p>
+              </div>
 
               <label className="field-shell">
                 <span className="field-label">Rancher Version</span>
