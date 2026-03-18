@@ -1,3 +1,6 @@
+import { mkdir } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { getRegistryCredentials } from "@sigstore/oci";
 import * as sigstore from "sigstore";
 import type { Bundle as SerializedBundle } from "sigstore";
@@ -116,6 +119,8 @@ const REGISTRY_ENV_PREFIXES: Record<RegistryName, string> = {
   "registry.suse.com": "REGISTRY_SUSE",
   "stgregistry.suse.com": "STGREGISTRY_SUSE",
 };
+
+const SIGSTORE_TUF_CACHE_PATH = path.join(os.tmpdir(), "sigstore-js-cache");
 
 class RegistryAuthError extends Error {
   constructor(message: string) {
@@ -326,6 +331,16 @@ export function describeBundleDescriptor(
 
 function cleanDetail(value: string) {
   return value.replace(/\s+/g, " ").trim();
+}
+
+async function getSigstoreVerifyOptions(identity: string) {
+  await mkdir(SIGSTORE_TUF_CACHE_PATH, { recursive: true });
+
+  return {
+    certificateIssuer: OIDC_ISSUER,
+    certificateIdentityURI: identity,
+    tufCachePath: SIGSTORE_TUF_CACHE_PATH,
+  } as const;
 }
 
 function isMissingBundleMessage(detail: string) {
@@ -700,10 +715,7 @@ async function verifySignatureBundles(
         continue;
       }
 
-      await sigstore.verify(bundle.bundle, {
-        certificateIssuer: OIDC_ISSUER,
-        certificateIdentityURI: identity,
-      });
+      await sigstore.verify(bundle.bundle, await getSigstoreVerifyOptions(identity));
 
       if (bundle.predicateType) {
         verifiedPredicates.add(bundle.predicateType);
@@ -747,10 +759,11 @@ async function verifyMessageSignatureBundles(
   for (const candidate of payloads) {
     for (const bundle of signatureBundles) {
       try {
-        await sigstore.verify(bundle.bundle, candidate, {
-          certificateIssuer: OIDC_ISSUER,
-          certificateIdentityURI: identity,
-        });
+        await sigstore.verify(
+          bundle.bundle,
+          candidate,
+          await getSigstoreVerifyOptions(identity),
+        );
 
         return {
           ok: true,
@@ -789,10 +802,7 @@ async function verifySbomBundles(
 
   for (const bundle of sbomBundles) {
     try {
-      await sigstore.verify(bundle.bundle, {
-        certificateIssuer: OIDC_ISSUER,
-        certificateIdentityURI: identity,
-      });
+      await sigstore.verify(bundle.bundle, await getSigstoreVerifyOptions(identity));
 
       return {
         ok: true,
