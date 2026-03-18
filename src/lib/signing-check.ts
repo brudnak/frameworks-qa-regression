@@ -4,16 +4,27 @@ import type { Bundle as SerializedBundle } from "sigstore";
 
 const OIDC_ISSUER = "https://token.actions.githubusercontent.com";
 const BUNDLE_ARTIFACT_TYPE = "application/vnd.dev.sigstore.bundle.v0.3+json";
+const BUNDLE_LAYER_MEDIA_TYPE = "application/vnd.dev.sigstore.bundle.v0.3+json";
 const OCI_INDEX_MEDIA_TYPE = "application/vnd.oci.image.index.v1+json";
 const MANIFEST_ACCEPT =
   "application/vnd.oci.image.index.v1+json,application/vnd.oci.image.manifest.v1+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.docker.distribution.manifest.v2+json";
 const SPDX_PREDICATE_TYPE = "https://spdx.dev/Document";
+const COSIGN_SIGN_PREDICATE_TYPE = "https://sigstore.dev/cosign/sign/v1";
+const SLSA_PROVENANCE_PREDICATE_TYPE = "https://slsa.dev/provenance/v1";
+const SBOM_ATTACHMENT_SUFFIX = "sbom";
+const SBOM_MEDIA_TYPES = new Set([
+  "text/spdx",
+  "text/spdx+json",
+  "text/spdx+xml",
+  "application/vnd.cyclonedx",
+  "application/vnd.cyclonedx+json",
+  "application/vnd.cyclonedx+xml",
+  "application/vnd.syft+json",
+]);
 
 type ImageKey = "webhook" | "rdp";
 
-type RegistryName = "docker.io" | "registry.suse.com" | "stgregistry.suse.com";
-
-export type SigningTagSource = RegistryName | "manual";
+export type RegistryName = "docker.io" | "registry.suse.com" | "stgregistry.suse.com";
 
 type Credentials = {
   username: string;
@@ -24,7 +35,7 @@ type Credentials = {
 type SigningCheckOptions = {
   imageKey: ImageKey;
   version: string;
-  includeStaging?: boolean;
+  registry: RegistryName;
 };
 
 type SigningBundleContentType = "message-signature" | "dsse-envelope" | "unknown";
@@ -105,8 +116,6 @@ const REGISTRY_ENV_PREFIXES: Record<RegistryName, string> = {
   "registry.suse.com": "REGISTRY_SUSE",
   "stgregistry.suse.com": "STGREGISTRY_SUSE",
 };
-
-const DEFAULT_REGISTRIES: RegistryName[] = ["docker.io", "registry.suse.com"];
 
 class RegistryAuthError extends Error {
   constructor(message: string) {
@@ -226,17 +235,11 @@ function contentTypeFromBundle(bundle: unknown): SigningBundleContentType {
     return "unknown";
   }
 
-  const content = bundle.content;
-
-  if (!isRecord(content)) {
-    return "unknown";
-  }
-
-  if ("messageSignature" in content) {
+  if ("messageSignature" in bundle) {
     return "message-signature";
   }
 
-  if ("dsseEnvelope" in content) {
+  if ("dsseEnvelope" in bundle) {
     return "dsse-envelope";
   }
 
@@ -244,11 +247,11 @@ function contentTypeFromBundle(bundle: unknown): SigningBundleContentType {
 }
 
 function decodePredicateTypeFromBundle(bundle: unknown) {
-  if (!isRecord(bundle) || !isRecord(bundle.content) || !("dsseEnvelope" in bundle.content)) {
+  if (!isRecord(bundle) || !("dsseEnvelope" in bundle)) {
     return undefined;
   }
 
-  const dsseEnvelope = bundle.content.dsseEnvelope;
+  const dsseEnvelope = bundle.dsseEnvelope;
 
   if (!isRecord(dsseEnvelope) || typeof dsseEnvelope.payload !== "string") {
     return undefined;
@@ -265,22 +268,46 @@ function decodePredicateTypeFromBundle(bundle: unknown) {
   }
 }
 
-function isSpdxPredicateType(predicateType: string | undefined) {
+function isSbomPredicateType(predicateType: string | undefined) {
   if (!predicateType) {
     return false;
   }
 
-  return predicateType === SPDX_PREDICATE_TYPE || predicateType.toLowerCase().includes("spdx");
+  const normalized = predicateType.toLowerCase();
+
+  return (
+    predicateType === SPDX_PREDICATE_TYPE ||
+    normalized.includes("spdx") ||
+    normalized.includes("cyclonedx") ||
+    normalized.includes("sbom")
+  );
+}
+
+function isSbomMediaType(mediaType: string | undefined) {
+  if (!mediaType) {
+    return false;
+  }
+
+  return SBOM_MEDIA_TYPES.has(mediaType);
+}
+
+function isSignaturePredicateType(predicateType: string | undefined) {
+  if (!predicateType) {
+    return false;
+  }
+
+  return (
+    predicateType === COSIGN_SIGN_PREDICATE_TYPE ||
+    predicateType === SLSA_PROVENANCE_PREDICATE_TYPE ||
+    predicateType.toLowerCase().includes("cosign/sign") ||
+    predicateType.toLowerCase().includes("slsa.dev/provenance")
+  );
 }
 
 export function describeBundleDescriptor(
   descriptor: OCIIndexManifest,
 ): BundleDescriptor | null {
   if (!descriptor?.digest) {
-    return null;
-  }
-
-  if (descriptor.artifactType !== BUNDLE_ARTIFACT_TYPE) {
     return null;
   }
 
@@ -510,6 +537,16 @@ class RegistryClient {
     return (await response.json()) as unknown;
   }
 
+  async getBlobText(digest: string) {
+    const response = await this.request(`/blobs/${digest}`);
+
+    if (!response) {
+      throw new Error(`Blob ${digest} was not found.`);
+    }
+
+    return await response.text();
+  }
+
   async getReferrers(digest: string) {
     const referrers = await this.request(`/referrers/${digest}`, {
       accept: OCI_INDEX_MEDIA_TYPE,
@@ -562,12 +599,8 @@ async function listDockerHubTags(repository: string, limit = 30) {
   return (payload.results ?? []).flatMap((tag) => (tag.name ? [tag.name] : []));
 }
 
-function assertRegistrySource(source: string): source is RegistryName {
+export function isRegistryName(source: string): source is RegistryName {
   return source === "docker.io" || source === "registry.suse.com" || source === "stgregistry.suse.com";
-}
-
-export function isSigningTagSource(source: string): source is SigningTagSource {
-  return source === "manual" || assertRegistrySource(source);
 }
 
 export async function listAvailableTags(
@@ -612,6 +645,13 @@ async function fetchBundle(client: RegistryClient, descriptor: BundleDescriptor)
   const manifest = manifestEnvelope.body as OCIManifest;
   const layer = manifest.layers?.[0];
 
+  if (
+    manifest.artifactType !== BUNDLE_ARTIFACT_TYPE &&
+    layer?.mediaType !== BUNDLE_LAYER_MEDIA_TYPE
+  ) {
+    return null;
+  }
+
   if (!layer?.digest) {
     throw new Error(`Bundle manifest ${descriptor.digest} is missing its payload layer.`);
   }
@@ -629,6 +669,64 @@ async function fetchBundle(client: RegistryClient, descriptor: BundleDescriptor)
 }
 
 async function verifySignatureBundles(
+  bundles: Array<{
+    bundle: SerializedBundle;
+    contentType: SigningBundleContentType;
+    predicateType?: string;
+  }>,
+  identity: string,
+) {
+  const signatureBundles = bundles.filter((bundle) => {
+    if (bundle.contentType === "message-signature") {
+      return true;
+    }
+
+    return bundle.contentType === "dsse-envelope" && isSignaturePredicateType(bundle.predicateType);
+  });
+
+  if (signatureBundles.length === 0) {
+    return {
+      ok: false,
+      detail: "No Sigstore image signature bundles were found.",
+    };
+  }
+  const failures: string[] = [];
+  const verifiedPredicates = new Set<string>();
+
+  for (const bundle of signatureBundles) {
+    try {
+      if (bundle.contentType === "message-signature") {
+        failures.push("Message-signature bundles are not expected for these images.");
+        continue;
+      }
+
+      await sigstore.verify(bundle.bundle, {
+        certificateIssuer: OIDC_ISSUER,
+        certificateIdentityURI: identity,
+      });
+
+      if (bundle.predicateType) {
+        verifiedPredicates.add(bundle.predicateType);
+      }
+    } catch (error) {
+      failures.push(cleanDetail(error instanceof Error ? error.message : String(error)));
+    }
+  }
+
+  if (verifiedPredicates.size > 0) {
+    return {
+      ok: true,
+      detail: `Verified Sigstore claims: ${[...verifiedPredicates].join(", ")}.`,
+    };
+  }
+
+  return {
+    ok: false,
+    detail: failures[0] ?? "Signature bundles were found, but verification failed.",
+  };
+}
+
+async function verifyMessageSignatureBundles(
   bundles: Array<{ bundle: SerializedBundle; contentType: SigningBundleContentType }>,
   identity: string,
   digest: string,
@@ -640,10 +738,7 @@ async function verifySignatureBundles(
   );
 
   if (signatureBundles.length === 0) {
-    return {
-      ok: false,
-      detail: "No Sigstore image signature bundles were found.",
-    };
+    return null;
   }
 
   const payloads = buildSimpleSigningPayloadCandidates(digest, repository, registry);
@@ -667,10 +762,7 @@ async function verifySignatureBundles(
     }
   }
 
-  return {
-    ok: false,
-    detail: failures[0] ?? "Signature bundles were found, but verification failed.",
-  };
+  return failures[0] ?? "Message-signature bundles were found, but verification failed.";
 }
 
 async function verifySbomBundles(
@@ -681,12 +773,12 @@ async function verifySbomBundles(
   }>,
   identity: string,
 ) {
-  const spdxBundles = bundles.filter(
+  const sbomBundles = bundles.filter(
     (bundle) =>
-      bundle.contentType === "dsse-envelope" && isSpdxPredicateType(bundle.predicateType),
+      bundle.contentType === "dsse-envelope" && isSbomPredicateType(bundle.predicateType),
   );
 
-  if (spdxBundles.length === 0) {
+  if (sbomBundles.length === 0) {
     return {
       ok: false,
       detail: "No SPDX SBOM attestation bundles were found.",
@@ -695,7 +787,7 @@ async function verifySbomBundles(
 
   const failures: string[] = [];
 
-  for (const bundle of spdxBundles) {
+  for (const bundle of sbomBundles) {
     try {
       await sigstore.verify(bundle.bundle, {
         certificateIssuer: OIDC_ISSUER,
@@ -704,7 +796,7 @@ async function verifySbomBundles(
 
       return {
         ok: true,
-        detail: "Verified an SPDX SBOM attestation bundle.",
+        detail: `Verified an SBOM attestation bundle${bundle.predicateType ? ` (${bundle.predicateType})` : ""}.`,
       };
     } catch (error) {
       failures.push(cleanDetail(error instanceof Error ? error.message : String(error)));
@@ -727,6 +819,184 @@ async function findLegacyTags(client: RegistryClient, digest: string) {
     hasLegacySignature: Boolean(signatureManifest),
     hasLegacyAttestation: Boolean(attestationManifest),
   };
+}
+
+function collectChildManifestDigests(manifestBody: unknown) {
+  if (!isRecord(manifestBody) || !Array.isArray(manifestBody.manifests)) {
+    return [] as string[];
+  }
+
+  return manifestBody.manifests.flatMap((manifest) => {
+    if (!isRecord(manifest) || typeof manifest.digest !== "string") {
+      return [];
+    }
+
+    return [manifest.digest];
+  });
+}
+
+async function loadSbomAttachmentForTag(client: RegistryClient, tag: string) {
+  const manifestEnvelope = await client.getManifest(tag);
+
+  if (!manifestEnvelope || !isRecord(manifestEnvelope.body)) {
+    return null;
+  }
+
+  return await loadSbomAttachmentFromManifest(client, manifestEnvelope.body as OCIManifest);
+}
+
+async function loadSbomAttachmentFromManifest(
+  client: RegistryClient,
+  manifest: OCIManifest,
+) {
+  const sbomLayer = manifest.layers?.find((layer) => isSbomMediaType(layer.mediaType));
+
+  if (!sbomLayer?.digest) {
+    return null;
+  }
+
+  return {
+    mediaType: sbomLayer.mediaType ?? "unknown",
+    document: await client.getBlobText(sbomLayer.digest),
+  };
+}
+
+async function loadSbomAttachmentFromReferrers(client: RegistryClient, digest: string) {
+  const referrers = await client.getReferrers(digest);
+
+  if (!referrers?.manifests?.length) {
+    return null;
+  }
+
+  for (const descriptor of referrers.manifests) {
+    if (typeof descriptor.digest !== "string") {
+      continue;
+    }
+
+    const manifestEnvelope = await client.getManifest(descriptor.digest);
+
+    if (!manifestEnvelope || !isRecord(manifestEnvelope.body)) {
+      continue;
+    }
+
+    const attachment = await loadSbomAttachmentFromManifest(
+      client,
+      manifestEnvelope.body as OCIManifest,
+    );
+
+    if (attachment) {
+      return attachment;
+    }
+  }
+
+  return null;
+}
+
+async function findSbomAttachment(
+  client: RegistryClient,
+  digest: string,
+  manifestBody: unknown,
+) {
+  const referrerAttachment = await loadSbomAttachmentFromReferrers(client, digest);
+
+  if (referrerAttachment) {
+    return referrerAttachment;
+  }
+
+  const candidateTags = [
+    `${toReferrersFallbackTag(digest)}.${SBOM_ATTACHMENT_SUFFIX}`,
+    ...collectChildManifestDigests(manifestBody).map(
+      (childDigest) => `${toReferrersFallbackTag(childDigest)}.${SBOM_ATTACHMENT_SUFFIX}`,
+    ),
+  ];
+
+  for (const tag of new Set(candidateTags)) {
+    const attachment = await loadSbomAttachmentForTag(client, tag);
+
+    if (attachment) {
+      return attachment;
+    }
+  }
+
+  return null;
+}
+
+async function findSbomInImageAttestations(
+  client: RegistryClient,
+  manifestBody: unknown,
+) {
+  if (isRecord(manifestBody) && isRecord(manifestBody.annotations)) {
+    for (const [key, value] of Object.entries(manifestBody.annotations)) {
+      if (!key.toLowerCase().includes("sbom") || typeof value !== "string") {
+        continue;
+      }
+
+      try {
+        JSON.parse(value);
+        return {
+          source: "image annotation",
+          predicateType: "embedded sbom annotation",
+        };
+      } catch {
+        // Ignore annotations that are not embedded JSON payloads.
+      }
+    }
+  }
+
+  if (!isRecord(manifestBody) || !Array.isArray(manifestBody.manifests)) {
+    return null;
+  }
+
+  for (const descriptor of manifestBody.manifests) {
+    const annotations =
+      isRecord(descriptor) && isRecord(descriptor.annotations) ? descriptor.annotations : null;
+
+    if (
+      !isRecord(descriptor) ||
+      typeof descriptor.digest !== "string" ||
+      annotations?.["vnd.docker.reference.type"] !== "attestation-manifest"
+    ) {
+      continue;
+    }
+
+    const attestationManifest = await client.getManifest(descriptor.digest);
+
+    if (!attestationManifest || !isRecord(attestationManifest.body)) {
+      continue;
+    }
+
+    const manifest = attestationManifest.body as OCIManifest;
+
+    for (const layer of manifest.layers ?? []) {
+      if (typeof layer.digest !== "string") {
+        continue;
+      }
+
+      try {
+        const payload = await client.getBlobJson(layer.digest);
+
+        if (!isRecord(payload)) {
+          continue;
+        }
+
+        const predicateType =
+          typeof payload.predicateType === "string" ? payload.predicateType : undefined;
+
+        if (!isSbomPredicateType(predicateType) || !("predicate" in payload)) {
+          continue;
+        }
+
+        return {
+          source: "image index attestation",
+          predicateType: predicateType ?? "unknown predicate",
+        };
+      } catch {
+        // Keep scanning the remaining attestation layers.
+      }
+    }
+  }
+
+  return null;
 }
 
 async function checkRegistry(
@@ -758,18 +1028,39 @@ async function checkRegistry(
   result.digest = imageManifest.digest;
 
   const descriptors = await loadBundleDescriptors(client, imageManifest.digest);
-  const loadedBundles = await Promise.all(descriptors.map((descriptor) => fetchBundle(client, descriptor)));
+  const loadedBundles = (
+    await Promise.all(descriptors.map((descriptor) => fetchBundle(client, descriptor)))
+  ).filter(Boolean) as Array<{
+    bundle: SerializedBundle;
+    contentType: SigningBundleContentType;
+    predicateType?: string;
+  }>;
 
-  result.signature = await verifySignatureBundles(
+  result.signature = await verifySignatureBundles(loadedBundles, image.identity);
+  result.sbom = await verifySbomBundles(loadedBundles, image.identity);
+
+  const messageSignatureFailure = await verifyMessageSignatureBundles(
     loadedBundles,
     image.identity,
     imageManifest.digest,
     image.image,
     registry,
   );
-  result.sbom = await verifySbomBundles(loadedBundles, image.identity);
+
+  if (!result.signature.ok && messageSignatureFailure && typeof messageSignatureFailure !== "string") {
+    result.signature = messageSignatureFailure;
+  }
 
   const legacy = await findLegacyTags(client, imageManifest.digest);
+  const imageAttestationSbom = await findSbomInImageAttestations(
+    client,
+    imageManifest.body,
+  );
+  const sbomAttachment = await findSbomAttachment(
+    client,
+    imageManifest.digest,
+    imageManifest.body,
+  );
 
   if (!result.signature.ok && isMissingBundleMessage(result.signature.detail)) {
     result.signature.detail = legacy.hasLegacySignature
@@ -777,10 +1068,30 @@ async function checkRegistry(
       : "No Sigstore image signature bundles or legacy cosign .sig tags were found.";
   }
 
+  if (
+    !result.signature.ok &&
+    messageSignatureFailure &&
+    typeof messageSignatureFailure === "string"
+  ) {
+    result.notes.push(messageSignatureFailure);
+  }
+
   if (!result.sbom.ok && isMissingBundleMessage(result.sbom.detail)) {
-    result.sbom.detail = legacy.hasLegacyAttestation
-      ? "No SPDX SBOM attestation bundles were found."
-      : "No SPDX SBOM attestation bundles or legacy cosign .att tags were found.";
+    if (imageAttestationSbom) {
+      result.sbom = {
+        ok: true,
+        detail: `Found an SBOM attestation in the ${imageAttestationSbom.source} (${imageAttestationSbom.predicateType}).`,
+      };
+    } else if (sbomAttachment) {
+      result.sbom = {
+        ok: true,
+        detail: `Downloaded SBOM attachment (${sbomAttachment.mediaType}).`,
+      };
+    } else {
+      result.sbom.detail = legacy.hasLegacyAttestation
+        ? "No SPDX SBOM attestation bundles were found."
+        : "No SPDX SBOM attestation bundles, downloadable .sbom attachments, or legacy cosign .att tags were found.";
+    }
   }
 
   if (legacy.hasLegacySignature && !result.signature.ok) {
@@ -817,11 +1128,13 @@ function formatRegistryResult(result: RegistryCheckResult) {
   return lines.join("\n");
 }
 
+function isResolveErrorMessage(message: string) {
+  return message.includes("Unable to resolve") && message.includes("to a digest");
+}
+
 export async function runSigningCheck(options: SigningCheckOptions) {
   const image = IMAGE_CATALOG[options.imageKey];
-  const registries: RegistryName[] = options.includeStaging
-    ? [...DEFAULT_REGISTRIES, "stgregistry.suse.com"]
-    : [...DEFAULT_REGISTRIES];
+  const registries: RegistryName[] = [options.registry];
 
   const output = [
     "Rancher image signing check",
@@ -842,11 +1155,19 @@ export async function runSigningCheck(options: SigningCheckOptions) {
           ? `${error.message} Add ${REGISTRY_ENV_PREFIXES[registry]}_USERNAME and ${REGISTRY_ENV_PREFIXES[registry]}_PASSWORD if this registry needs credentials.`
           : cleanDetail(error instanceof Error ? error.message : String(error));
 
-      output.push(
-        `${registry}/${image.image}:${options.version}`,
-        `  [fail] registry check: ${message}`,
-        "",
-      );
+      if (isResolveErrorMessage(message)) {
+        output.push(
+          `${registry}/${image.image}:${options.version}`,
+          "  [note] registry check: This tag could not be resolved in this registry, so no signature lookup was attempted there.",
+          "",
+        );
+      } else {
+        output.push(
+          `${registry}/${image.image}:${options.version}`,
+          `  [fail] registry check: ${message}`,
+          "",
+        );
+      }
     }
   }
 

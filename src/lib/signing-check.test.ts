@@ -113,12 +113,16 @@ describe("describeBundleDescriptor", () => {
     });
   });
 
-  it("ignores non-sigstore descriptors", () => {
+  it("keeps fallback referrer descriptors so the manifest can be inspected", () => {
     expect(
       describeBundleDescriptor({
         digest: "sha256:cafebabe",
         artifactType: "application/vnd.oci.image.manifest.v1+json",
       }),
-    ).toBeNull();
+    ).toEqual({
+      digest: "sha256:cafebabe",
+      contentType: "unknown",
+      predicateType: undefined,
+    });
   });
 });

@@ -73,9 +73,8 @@ export function LauncherDashboard({
   });
   const [signingForm, setSigningForm] = useState({
     imageKey: "webhook",
-    tagSource: "manual",
+    registry: "docker.io",
     version: "",
-    includeStaging: false,
   });
 
   const topSummary = useMemo(() => versionSummaries.slice(0, 4), [versionSummaries]);
@@ -160,16 +159,8 @@ export function LauncherDashboard({
   }
 
   async function handleLoadSigningTags() {
-    const tagSource = signingForm.tagSource;
+    const registry = signingForm.registry;
     const imageKey = signingForm.imageKey;
-
-    if (tagSource === "manual") {
-      setTagBanner({
-        kind: "error",
-        message: "Choose Docker Hub, registry.suse.com, or stgregistry.suse.com first.",
-      });
-      return;
-    }
 
     setTagBanner(null);
 
@@ -181,7 +172,7 @@ export function LauncherDashboard({
         },
         body: JSON.stringify({
           imageKey,
-          source: tagSource,
+          source: registry,
         }),
       });
 
@@ -205,8 +196,8 @@ export function LauncherDashboard({
         kind: "success",
         message:
           tags.length > 0
-            ? `Loaded ${tags.length} recent tags from ${tagSource}.`
-            : `No recent version tags were returned from ${tagSource}.`,
+            ? `Loaded ${tags.length} recent tags from ${registry}.`
+            : `No recent version tags were returned from ${registry}.`,
       });
 
       if (!signingForm.version && tags[0]) {
@@ -622,20 +613,19 @@ export function LauncherDashboard({
             </label>
 
             <label className="field-shell">
-              <span className="field-label">Tag Source</span>
+              <span className="field-label">Registry</span>
               <select
-                value={signingForm.tagSource}
+                value={signingForm.registry}
                 onChange={(event) => {
-                  const nextSource = event.target.value;
+                  const nextRegistry = event.target.value;
                   setSigningForm((current) => ({
                     ...current,
-                    tagSource: nextSource,
+                    registry: nextRegistry,
                   }));
                   setAvailableSigningTags([]);
                   setTagBanner(null);
                 }}
               >
-                <option value="manual">enter manually</option>
                 <option value="docker.io">Docker Hub</option>
                 <option value="registry.suse.com">registry.suse.com (prime)</option>
                 <option value="stgregistry.suse.com">
@@ -649,7 +639,7 @@ export function LauncherDashboard({
               <div className="inline-action-row">
                 <button
                   className="ghost-button"
-                  disabled={isTagPending || signingForm.tagSource === "manual"}
+                  disabled={isTagPending}
                   onClick={handleLoadSigningTags}
                   type="button"
                 >
@@ -682,21 +672,10 @@ export function LauncherDashboard({
                   ))}
                 </select>
               </div>
+              <span className="field-help">
+                The selected registry is both the tag source and the verification target.
+              </span>
             </div>
-
-            <label className="check-shell full-width">
-              <input
-                checked={signingForm.includeStaging}
-                onChange={(event) =>
-                  setSigningForm((current) => ({
-                    ...current,
-                    includeStaging: event.target.checked,
-                  }))
-                }
-                type="checkbox"
-              />
-              <span>Also check `stgregistry.suse.com`</span>
-            </label>
           </div>
 
           {tagBanner ? (

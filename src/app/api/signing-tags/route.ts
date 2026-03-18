@@ -2,7 +2,7 @@ import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
 import { authOptions } from "@/lib/auth";
 import { isAuthorizedUser } from "@/lib/authz";
-import { isSigningTagSource, listAvailableTags } from "@/lib/signing-check";
+import { isRegistryName, listAvailableTags } from "@/lib/signing-check";
 
 type SigningTagRequest = {
   imageKey?: string;
@@ -35,7 +35,7 @@ export async function POST(request: Request) {
     return badRequest("Choose either the webhook or rdp image.");
   }
 
-  if (!source || !isSigningTagSource(source) || source === "manual") {
+  if (!source || !isRegistryName(source)) {
     return badRequest("Choose a registry source to load tags.");
   }
 

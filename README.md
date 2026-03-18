@@ -45,10 +45,10 @@ npm run dev
 
 The dashboard includes an image signing check form that:
 
-- resolves the selected image tag to a digest
+- resolves the selected image tag to a digest in the registry you chose
 - can load recent version tags from Docker Hub or supported OCI registries
 - queries OCI referrers for Sigstore bundle artifacts
-- verifies keyless image signatures and SPDX SBOM attestations in TypeScript
+- verifies keyless image signatures and also falls back to downloadable SBOM attachments when registries publish them outside Sigstore attestation bundles
 
 This is Vercel-friendly because it no longer shells out to `cosign` or `crane`.
 If a registry requires auth, you can optionally provide credentials with env

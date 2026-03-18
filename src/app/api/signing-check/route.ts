@@ -2,12 +2,12 @@ import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
 import { authOptions } from "@/lib/auth";
 import { isAuthorizedUser } from "@/lib/authz";
-import { runSigningCheck } from "@/lib/signing-check";
+import { isRegistryName, runSigningCheck } from "@/lib/signing-check";
 
 type SigningCheckRequest = {
   imageKey?: string;
   version?: string;
-  includeStaging?: boolean;
+  registry?: string;
 };
 
 export const runtime = "nodejs";
@@ -31,6 +31,7 @@ export async function POST(request: Request) {
   const body = (await request.json()) as SigningCheckRequest;
   const imageKey = body.imageKey?.trim();
   const version = body.version?.trim();
+  const registry = body.registry?.trim();
 
   if (!imageKey || !["webhook", "rdp"].includes(imageKey)) {
     return badRequest("Choose either the webhook or rdp image.");
@@ -40,13 +41,17 @@ export async function POST(request: Request) {
     return badRequest("A version is required for browser-based signing checks.");
   }
 
+  if (!registry || !isRegistryName(registry)) {
+    return badRequest("Choose which registry to check.");
+  }
+
   try {
     return NextResponse.json({
       ok: true,
       output: await runSigningCheck({
         imageKey: imageKey as "webhook" | "rdp",
         version,
-        includeStaging: body.includeStaging,
+        registry,
       }),
     });
   } catch (error) {
