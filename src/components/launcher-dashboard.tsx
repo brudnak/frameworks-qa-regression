@@ -68,6 +68,8 @@ export function LauncherDashboard({
     tenantRancherAdminToken: "",
     tenantClusterName: "",
     notes: "",
+    reportToQase: false,
+    qaseTestRunId: "",
   });
   const [signingForm, setSigningForm] = useState({
     imageKey: "webhook",
@@ -430,6 +432,40 @@ export function LauncherDashboard({
                   }
                 />
               </label>
+
+              <label className="check-shell full-width">
+                <input
+                  checked={form.reportToQase}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      reportToQase: event.target.checked,
+                    }))
+                  }
+                  type="checkbox"
+                />
+                <span>Report this run to Qase</span>
+              </label>
+
+              {form.reportToQase ? (
+                <label className="field-shell full-width">
+                  <span className="field-label">Qase Test Run ID</span>
+                  <input
+                    placeholder="1234"
+                    value={form.qaseTestRunId}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        qaseTestRunId: event.target.value,
+                      }))
+                    }
+                  />
+                  <span className="field-help">
+                    Uses `RM_QASE_PROJECT_ID` plus `QASE_AUTOMATION_TOKEN` in GitHub
+                    Actions to upload JUnit results into this existing Qase run.
+                  </span>
+                </label>
+              ) : null}
             </div>
 
             <div className="button-row" style={{ marginTop: "18px" }}>

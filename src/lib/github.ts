@@ -205,6 +205,8 @@ export async function dispatchWorkflowRun(input: {
   profile: string;
   rancherVersion: string;
   notes?: string;
+  reportToQase?: boolean;
+  qaseTestRunId?: string;
 }) {
   const workflow = getWorkflowDefinition(input.workflowId);
   const { ref } = requireGitHubRepoConfig();
@@ -220,6 +222,8 @@ export async function dispatchWorkflowRun(input: {
         profile: input.profile,
         rancher_version: input.rancherVersion,
         notes: input.notes ?? "",
+        report_to_qase: input.reportToQase ? "true" : "false",
+        qase_test_run_id: input.qaseTestRunId ?? "",
       },
     }),
   });

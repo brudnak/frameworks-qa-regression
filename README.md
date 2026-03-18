@@ -96,6 +96,15 @@ Available suites in the launcher:
 - Charts Webhook
 - Hosted Tenant RBAC
 
+Each launch can optionally report JUnit results into an existing Qase run. To
+use that, add these in GitHub for the repository that owns the workflows:
+
+- `QASE_AUTOMATION_TOKEN` as a GitHub secret
+- `RM_QASE_PROJECT_ID` as a GitHub variable or secret
+
+Then enable `Report this run to Qase` in the launcher and provide the target
+Qase test run ID.
+
 Their run titles are tagged like:
 
 ```text

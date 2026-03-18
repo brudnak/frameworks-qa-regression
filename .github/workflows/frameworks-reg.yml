@@ -16,6 +16,18 @@ on:
         description: Optional launch notes
         required: false
         type: string
+      report_to_qase:
+        description: Upload JUnit results to Qase
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+      qase_test_run_id:
+        description: Existing Qase test run ID to upload into
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -24,6 +36,9 @@ jobs:
   run-test-suite:
     runs-on: ubuntu-latest
     environment: ${{ inputs.profile }}
+    env:
+      REPORT_TO_QASE: ${{ inputs.report_to_qase }}
+      QASE_TEST_RUN_ID: ${{ inputs.qase_test_run_id }}
     concurrency:
       group: frameworks-reg-${{ inputs.profile }}
       cancel-in-progress: false
@@ -35,6 +50,12 @@ jobs:
         uses: actions/setup-go@v4
         with:
           go-version: 'stable'
+
+      - name: Install test tooling
+        run: |
+          go install gotest.tools/gotestsum@latest
+          go install github.com/qase-tms/qasectl@latest
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
       
       - name: Clone Rancher Tests Repository
         run: |
@@ -66,7 +87,14 @@ jobs:
           CATTLE_TEST_CONFIG: ${{ github.workspace }}/cattle-config.yaml
         run: |
           cd tests
-          go test -v -tags=validation,infra.any,cluster.any ./validation/configmaps -run TestConfigMapTestSuite
+          mkdir -p "$GITHUB_WORKSPACE/qase-results"
+          gotestsum \
+            --format standard-verbose \
+            --junitfile "$GITHUB_WORKSPACE/qase-results/frameworks-reg-configmaps.xml" \
+            -- \
+            -v -tags=validation,infra.any,cluster.any \
+            ./validation/configmaps \
+            -run TestConfigMapTestSuite
       
       - name: Wait between tests
         run: sleep 30
@@ -78,7 +106,14 @@ jobs:
           CATTLE_TEST_CONFIG: ${{ github.workspace }}/cattle-config.yaml
         run: |
           cd tests
-          go test -v -tags=validation,infra.any,cluster.any ./validation/schemas -run TestSchemaChangesTestSuite
+          mkdir -p "$GITHUB_WORKSPACE/qase-results"
+          gotestsum \
+            --format standard-verbose \
+            --junitfile "$GITHUB_WORKSPACE/qase-results/frameworks-reg-schemas.xml" \
+            -- \
+            -v -tags=validation,infra.any,cluster.any \
+            ./validation/schemas \
+            -run TestSchemaChangesTestSuite
       
       - name: Wait between tests
         run: sleep 30
@@ -90,8 +125,24 @@ jobs:
           CATTLE_TEST_CONFIG: ${{ github.workspace }}/cattle-config.yaml
         run: |
           cd tests
-          go test -v -tags=validation,infra.any,cluster.any ./validation/nodeannotations -run TestNodeAnnotationsTestSuite
-      
+          mkdir -p "$GITHUB_WORKSPACE/qase-results"
+          gotestsum \
+            --format standard-verbose \
+            --junitfile "$GITHUB_WORKSPACE/qase-results/frameworks-reg-nodeannotations.xml" \
+            -- \
+            -v -tags=validation,infra.any,cluster.any \
+            ./validation/nodeannotations \
+            -run TestNodeAnnotationsTestSuite
+
+      - name: Report results to Qase
+        if: ${{ always() && inputs.report_to_qase == 'true' }}
+        continue-on-error: true
+        env:
+          QASE_PROJECT_CODE: ${{ vars.RM_QASE_PROJECT_ID != '' && vars.RM_QASE_PROJECT_ID || secrets.RM_QASE_PROJECT_ID }}
+          QASE_AUTOMATION_TOKEN: ${{ secrets.QASE_AUTOMATION_TOKEN }}
+        run: |
+          bash .github/scripts/upload-to-qase.sh "$GITHUB_WORKSPACE/qase-results"
+
       - name: Check test results
         if: always()
         run: |

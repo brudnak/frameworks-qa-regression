@@ -20,6 +20,8 @@ type LaunchRequest = {
   tenantRancherAdminToken?: string;
   tenantClusterName?: string;
   notes?: string;
+  reportToQase?: boolean;
+  qaseTestRunId?: string;
 };
 
 function badRequest(message: string, status = 400) {
@@ -86,6 +88,10 @@ export async function POST(request: Request) {
     }
   }
 
+  if (body.reportToQase && !body.qaseTestRunId?.trim()) {
+    return badRequest("Qase test run ID is required when Qase reporting is enabled.");
+  }
+
   const activeRun = await findActiveRunForProfile(body.profile);
 
   if (activeRun) {
@@ -129,6 +135,8 @@ export async function POST(request: Request) {
     profile: body.profile,
     rancherVersion: body.rancherVersion.trim(),
     notes: body.notes?.trim(),
+    reportToQase: body.reportToQase,
+    qaseTestRunId: body.qaseTestRunId?.trim(),
   });
 
   return NextResponse.json({
