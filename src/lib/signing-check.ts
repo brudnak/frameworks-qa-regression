@@ -57,6 +57,7 @@ type VerificationStatus = {
 type RegistryCheckResult = {
   reference: string;
   digest?: string;
+  checks: string[];
   notes: string[];
   signature: VerificationStatus;
   sbom: VerificationStatus;
@@ -1024,6 +1025,7 @@ async function checkRegistry(
 
   const result: RegistryCheckResult = {
     reference,
+    checks: [],
     notes: [],
     signature: { ok: false, detail: "No check run." },
     sbom: { ok: false, detail: "No check run." },
@@ -1036,8 +1038,15 @@ async function checkRegistry(
   }
 
   result.digest = imageManifest.digest;
+  result.checks.push(`Resolved the selected tag to digest ${imageManifest.digest}.`);
 
   const descriptors = await loadBundleDescriptors(client, imageManifest.digest);
+  result.checks.push(
+    `Signature lookup checked Sigstore referrers for ${toReferrersFallbackTag(imageManifest.digest)} plus legacy .sig tags.`,
+  );
+  result.checks.push(
+    "SBOM lookup checked Sigstore bundles, image index attestations, downloadable .sbom attachments, and legacy .att tags.",
+  );
   const loadedBundles = (
     await Promise.all(descriptors.map((descriptor) => fetchBundle(client, descriptor)))
   ).filter(Boolean) as Array<{
@@ -1130,6 +1139,10 @@ function formatRegistryResult(result: RegistryCheckResult) {
     `  ${formatStatus("signature", result.signature)}`,
     `  ${formatStatus("sbom", result.sbom)}`,
   ];
+
+  for (const check of result.checks) {
+    lines.push(`  [check] ${check}`);
+  }
 
   for (const note of result.notes) {
     lines.push(`  [note] ${note}`);
