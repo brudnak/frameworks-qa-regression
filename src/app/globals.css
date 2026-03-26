@@ -455,6 +455,28 @@ html:not([data-theme="light-ranch-house"]):not([data-theme="dark-suse-green"]):n
   margin-top: 18px;
 }
 
+.dashboard-tab-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.dashboard-tab {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.8rem 1rem;
+  background: linear-gradient(180deg, var(--panel-strong), var(--surface));
+  color: var(--muted);
+}
+
+.dashboard-tab.active {
+  color: var(--foreground);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent) 20%, transparent),
+    0 18px 34px rgba(0, 0, 0, 0.12);
+}
+
 .dashboard-header {
   display: flex;
   justify-content: space-between;
@@ -617,6 +639,21 @@ html:not([data-theme="light-ranch-house"]):not([data-theme="dark-suse-green"]):n
   padding: 16px;
   border-radius: 22px;
   background: linear-gradient(180deg, var(--panel-strong), var(--surface));
+}
+
+.countdown-card {
+  margin-top: 16px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  background: linear-gradient(180deg, var(--panel-strong), var(--surface));
+}
+
+.countdown-value {
+  margin: 0;
+  font-size: clamp(1.8rem, 4vw, 3rem);
+  font-weight: 700;
+  line-height: 1.05;
 }
 
 .stat-card h4 {

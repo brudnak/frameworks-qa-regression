@@ -20,6 +20,8 @@ type BannerState =
   | { kind: "error"; message: string }
   | null;
 
+type DashboardTab = "launch" | "reports" | "tools";
+
 function formatWhen(value: string) {
   return new Intl.DateTimeFormat("en-US", {
     dateStyle: "medium",
@@ -39,6 +41,16 @@ function getConclusionClass(run: WorkflowRunSummary) {
   return "pending";
 }
 
+function parseLocalDate(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+
+  if (!year || !month || !day) {
+    return null;
+  }
+
+  return new Date(year, month - 1, day);
+}
+
 export function LauncherDashboard({
   login,
   owner,
@@ -52,6 +64,7 @@ export function LauncherDashboard({
   const [isPending, startTransition] = useTransition();
   const [isSigningPending, startSigningTransition] = useTransition();
   const [isTagPending, startTagTransition] = useTransition();
+  const [activeTab, setActiveTab] = useState<DashboardTab>("launch");
   const [banner, setBanner] = useState<BannerState>(null);
   const [signingBanner, setSigningBanner] = useState<BannerState>(null);
   const [tagBanner, setTagBanner] = useState<BannerState>(null);
@@ -76,12 +89,48 @@ export function LauncherDashboard({
     registry: "docker.io",
     version: "",
   });
+  const [countdownForm, setCountdownForm] = useState({
+    label: "Code freeze",
+    date: "",
+  });
 
   const topSummary = useMemo(() => versionSummaries.slice(0, 4), [versionSummaries]);
   const selectedWorkflow = workflows.find(
     (workflow) => workflow.id === form.workflowId,
   );
   const needsTenantRancher = !!selectedWorkflow?.requiresTenantRancher;
+  const countdown = useMemo(() => {
+    const target = parseLocalDate(countdownForm.date);
+
+    if (!target) {
+      return null;
+    }
+
+    const today = new Date();
+    const todayAtMidnight = new Date(
+      today.getFullYear(),
+      today.getMonth(),
+      today.getDate(),
+    );
+    const targetAtMidnight = new Date(
+      target.getFullYear(),
+      target.getMonth(),
+      target.getDate(),
+    );
+    const days = Math.round(
+      (targetAtMidnight.getTime() - todayAtMidnight.getTime()) / 86_400_000,
+    );
+
+    return {
+      dateLabel: target.toLocaleDateString("en-US", {
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+      }),
+      days,
+      label: countdownForm.label.trim() || "Code freeze",
+    };
+  }, [countdownForm.date, countdownForm.label]);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -231,7 +280,26 @@ export function LauncherDashboard({
         </div>
       </div>
 
-      <div className="dashboard-grid">
+      <div className="dashboard-tab-row" role="tablist" aria-label="Launcher sections">
+        {[
+          ["launch", "Launch QA"],
+          ["reports", "QA Reports"],
+          ["tools", "Tools"],
+        ].map(([tab, label]) => (
+          <button
+            aria-selected={activeTab === tab}
+            className={`dashboard-tab ${activeTab === tab ? "active" : ""}`}
+            key={tab}
+            onClick={() => setActiveTab(tab as DashboardTab)}
+            role="tab"
+            type="button"
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === "launch" ? (
         <section className="panel">
           <div className="panel-header">
             <div>
@@ -470,236 +538,308 @@ export function LauncherDashboard({
             ) : null}
           </form>
         </section>
+      ) : null}
 
-        <section className="panel">
-          <div className="panel-header">
-            <div>
-              <p className="section-label">Version View</p>
-              <h3 className="panel-title">Recent Rancher pass rates</h3>
-              <p className="field-help">
-                This is derived from recent GitHub workflow conclusions grouped
-                by the version tag in the run title.
-              </p>
+      {activeTab === "reports" ? (
+        <>
+          <section className="panel">
+            <div className="panel-header">
+              <div>
+                <p className="section-label">Version View</p>
+                <h3 className="panel-title">Recent Rancher pass rates</h3>
+                <p className="field-help">
+                  This is derived from recent GitHub workflow conclusions grouped
+                  by the version tag in the run title.
+                </p>
+              </div>
             </div>
-          </div>
 
-          <div className="stats-grid">
-            {topSummary.length > 0 ? (
-              topSummary.map((summary) => (
-                <article className="stat-card" key={summary.version}>
-                  <p className="small-label">Rancher</p>
-                  <h4>{summary.version}</h4>
-                  <p className="stat-value">{summary.passRate}%</p>
-                  <p className="stat-meta">
-                    {summary.successfulRuns}/{summary.completedRuns} completed runs
-                    passed
+            <div className="stats-grid">
+              {topSummary.length > 0 ? (
+                topSummary.map((summary) => (
+                  <article className="stat-card" key={summary.version}>
+                    <p className="small-label">Rancher</p>
+                    <h4>{summary.version}</h4>
+                    <p className="stat-value">{summary.passRate}%</p>
+                    <p className="stat-meta">
+                      {summary.successfulRuns}/{summary.completedRuns} completed runs
+                      passed
+                    </p>
+                  </article>
+                ))
+              ) : (
+                <article className="stat-card">
+                  <p className="small-label">No data yet</p>
+                  <p className="helper-text">
+                    Launch a tagged run and this view will start filling in.
                   </p>
                 </article>
-              ))
-            ) : (
-              <article className="stat-card">
-                <p className="small-label">No data yet</p>
-                <p className="helper-text">
-                  Launch a tagged run and this view will start filling in.
+              )}
+            </div>
+          </section>
+
+          <section className="panel">
+            <div className="panel-header">
+              <div>
+                <p className="section-label">Recent Runs</p>
+                <h3 className="panel-title">Workflow history</h3>
+                <p className="field-help">
+                  Each card links back to GitHub Actions for the full job log.
                 </p>
-              </article>
-            )}
-          </div>
-        </section>
-      </div>
+              </div>
+            </div>
 
-      <section className="panel">
-        <div className="panel-header">
-          <div>
-            <p className="section-label">Recent Runs</p>
-            <h3 className="panel-title">Workflow history</h3>
-            <p className="field-help">
-              Each card links back to GitHub Actions for the full job log.
-            </p>
-          </div>
-        </div>
-
-        <div className="run-list">
-          {recentRuns.length > 0 ? (
-            recentRuns.map((run) => (
-              <article className="run-card" key={run.id}>
-                <div className="run-card-head">
-                  <div>
-                    <p className="run-title">{run.title}</p>
-                    <div className="run-meta">
-                      <span>{run.workflowName}</span>
-                      <span>{formatWhen(run.createdAt)}</span>
-                      <span>@{run.actor}</span>
+            <div className="run-list">
+              {recentRuns.length > 0 ? (
+                recentRuns.map((run) => (
+                  <article className="run-card" key={run.id}>
+                    <div className="run-card-head">
+                      <div>
+                        <p className="run-title">{run.title}</p>
+                        <div className="run-meta">
+                          <span>{run.workflowName}</span>
+                          <span>{formatWhen(run.createdAt)}</span>
+                          <span>@{run.actor}</span>
+                        </div>
+                      </div>
+                      <span className={`badge ${getConclusionClass(run)}`}>
+                        {run.conclusion ?? run.status}
+                      </span>
                     </div>
+                    <div className="badge-row">
+                      {run.rancherVersion ? (
+                        <span className="badge">rv:{run.rancherVersion}</span>
+                      ) : null}
+                      {run.profile ? <span className="badge">profile:{run.profile}</span> : null}
+                      {run.workflowId ? (
+                        <span className="badge">suite:{run.workflowId}</span>
+                      ) : null}
+                      <span className="badge">branch:{run.branch}</span>
+                    </div>
+
+                    <a className="ghost-button" href={run.url} rel="noreferrer" target="_blank">
+                      Open in GitHub
+                    </a>
+                  </article>
+                ))
+              ) : (
+                <div className="empty-state">
+                  <h2>No runs yet</h2>
+                  <p>
+                    Once you queue a workflow, recent runs will appear here with a
+                    cleaner summary view than the raw Actions screen.
+                  </p>
+                </div>
+              )}
+            </div>
+          </section>
+        </>
+      ) : null}
+
+      {activeTab === "tools" ? (
+        <div className="dashboard-grid">
+          <section className="panel">
+            <div className="panel-header">
+              <div>
+                <p className="section-label">Signing Check</p>
+                <h3 className="panel-title">Check Rancher image signing</h3>
+                <p className="field-help">
+                  This uses a native TypeScript Sigstore verifier, so it can run on
+                  Vercel too. Private registries can still need optional server-side
+                  credentials.
+                </p>
+              </div>
+            </div>
+
+            <form onSubmit={handleSigningSubmit}>
+              <div className="signing-grid">
+                <label className="field-shell">
+                  <span className="field-label">Image</span>
+                  <select
+                    value={signingForm.imageKey}
+                    onChange={(event) => {
+                      setSigningForm((current) => ({
+                        ...current,
+                        imageKey: event.target.value,
+                      }));
+                      setAvailableSigningTags([]);
+                      setTagBanner(null);
+                    }}
+                  >
+                    <option value="webhook">webhook (rancher-webhook)</option>
+                    <option value="rdp">rdp (remotedialer-proxy)</option>
+                  </select>
+                </label>
+
+                <label className="field-shell">
+                  <span className="field-label">Version</span>
+                  <input
+                    placeholder="v0.7.0"
+                    value={signingForm.version}
+                    onChange={(event) =>
+                      setSigningForm((current) => ({
+                        ...current,
+                        version: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+
+                <label className="field-shell">
+                  <span className="field-label">Registry</span>
+                  <select
+                    value={signingForm.registry}
+                    onChange={(event) => {
+                      const nextRegistry = event.target.value;
+                      setSigningForm((current) => ({
+                        ...current,
+                        registry: nextRegistry,
+                      }));
+                      setAvailableSigningTags([]);
+                      setTagBanner(null);
+                    }}
+                  >
+                    <option value="docker.io">Docker Hub</option>
+                    <option value="registry.suse.com">registry.suse.com (prime)</option>
+                    <option value="stgregistry.suse.com">
+                      stgregistry.suse.com (staging)
+                    </option>
+                  </select>
+                </label>
+
+                <div className="field-shell">
+                  <span className="field-label">Recent Tags</span>
+                  <div className="inline-action-row">
+                    <button
+                      className="ghost-button"
+                      disabled={isTagPending}
+                      onClick={handleLoadSigningTags}
+                      type="button"
+                    >
+                      {isTagPending ? "Loading..." : "Load Recent Tags"}
+                    </button>
+
+                    <select
+                      disabled={availableSigningTags.length === 0}
+                      value={
+                        availableSigningTags.includes(signingForm.version)
+                          ? signingForm.version
+                          : ""
+                      }
+                      onChange={(event) =>
+                        setSigningForm((current) => ({
+                          ...current,
+                          version: event.target.value,
+                        }))
+                      }
+                    >
+                      <option value="">
+                        {availableSigningTags.length > 0
+                          ? "Select a loaded tag"
+                          : "Load tags or enter manually"}
+                      </option>
+                      {availableSigningTags.map((tag) => (
+                        <option key={tag} value={tag}>
+                          {tag}
+                        </option>
+                      ))}
+                    </select>
                   </div>
-                  <span className={`badge ${getConclusionClass(run)}`}>
-                    {run.conclusion ?? run.status}
+                  <span className="field-help">
+                    The selected registry is both the tag source and the verification target.
                   </span>
                 </div>
+              </div>
 
-                <div className="badge-row">
-                  {run.rancherVersion ? (
-                    <span className="badge">rv:{run.rancherVersion}</span>
-                  ) : null}
-                  {run.profile ? <span className="badge">profile:{run.profile}</span> : null}
-                  {run.workflowId ? (
-                    <span className="badge">suite:{run.workflowId}</span>
-                  ) : null}
-                  <span className="badge">branch:{run.branch}</span>
-                </div>
+              {tagBanner ? (
+                <div className={`status-banner ${tagBanner.kind}`}>{tagBanner.message}</div>
+              ) : null}
 
-                <a className="ghost-button" href={run.url} rel="noreferrer" target="_blank">
-                  Open in GitHub
-                </a>
-              </article>
-            ))
-          ) : (
-            <div className="empty-state">
-              <h2>No runs yet</h2>
-              <p>
-                Once you queue a workflow, recent runs will appear here with a
-                cleaner summary view than the raw Actions screen.
-              </p>
-            </div>
-          )}
-        </div>
-      </section>
-
-      <section className="panel">
-        <div className="panel-header">
-          <div>
-            <p className="section-label">Signing Check</p>
-            <h3 className="panel-title">Check Rancher image signing</h3>
-            <p className="field-help">
-              This uses a native TypeScript Sigstore verifier, so it can run on
-              Vercel too. Private registries can still need optional server-side
-              credentials.
-            </p>
-          </div>
-        </div>
-
-        <form onSubmit={handleSigningSubmit}>
-          <div className="signing-grid">
-            <label className="field-shell">
-              <span className="field-label">Image</span>
-              <select
-                value={signingForm.imageKey}
-                onChange={(event) => {
-                  setSigningForm((current) => ({
-                    ...current,
-                    imageKey: event.target.value,
-                  }));
-                  setAvailableSigningTags([]);
-                  setTagBanner(null);
-                }}
-              >
-                <option value="webhook">webhook (rancher-webhook)</option>
-                <option value="rdp">rdp (remotedialer-proxy)</option>
-              </select>
-            </label>
-
-            <label className="field-shell">
-              <span className="field-label">Version</span>
-              <input
-                placeholder="v0.7.0"
-                value={signingForm.version}
-                onChange={(event) =>
-                  setSigningForm((current) => ({
-                    ...current,
-                    version: event.target.value,
-                  }))
-                }
-              />
-            </label>
-
-            <label className="field-shell">
-              <span className="field-label">Registry</span>
-              <select
-                value={signingForm.registry}
-                onChange={(event) => {
-                  const nextRegistry = event.target.value;
-                  setSigningForm((current) => ({
-                    ...current,
-                    registry: nextRegistry,
-                  }));
-                  setAvailableSigningTags([]);
-                  setTagBanner(null);
-                }}
-              >
-                <option value="docker.io">Docker Hub</option>
-                <option value="registry.suse.com">registry.suse.com (prime)</option>
-                <option value="stgregistry.suse.com">
-                  stgregistry.suse.com (staging)
-                </option>
-              </select>
-            </label>
-
-            <div className="field-shell">
-              <span className="field-label">Recent Tags</span>
-              <div className="inline-action-row">
-                <button
-                  className="ghost-button"
-                  disabled={isTagPending}
-                  onClick={handleLoadSigningTags}
-                  type="button"
-                >
-                  {isTagPending ? "Loading..." : "Load Recent Tags"}
+              <div className="button-row" style={{ marginTop: "18px" }}>
+                <button className="primary-button" disabled={isSigningPending} type="submit">
+                  {isSigningPending ? "Running..." : "Run Signing Check"}
                 </button>
+              </div>
 
-                <select
-                  disabled={availableSigningTags.length === 0}
-                  value={
-                    availableSigningTags.includes(signingForm.version)
-                      ? signingForm.version
-                      : ""
-                  }
+              {signingBanner ? (
+                <div className={`status-banner ${signingBanner.kind}`}>
+                  {signingBanner.message}
+                </div>
+              ) : null}
+
+              <pre className="terminal-output">
+                {signingOutput ||
+                  "No signing check output yet. Choose an image and version, then run the verifier."}
+              </pre>
+            </form>
+          </section>
+
+          <section className="panel">
+            <div className="panel-header">
+              <div>
+                <p className="section-label">Countdown</p>
+                <h3 className="panel-title">Days Until Code Freeze</h3>
+                <p className="field-help">
+                  Drop in the next freeze date and this will give you a quick countdown.
+                </p>
+              </div>
+            </div>
+
+            <div className="field-grid">
+              <label className="field-shell">
+                <span className="field-label">Label</span>
+                <input
+                  placeholder="Rancher v2.14 code freeze"
+                  value={countdownForm.label}
                   onChange={(event) =>
-                    setSigningForm((current) => ({
+                    setCountdownForm((current) => ({
                       ...current,
-                      version: event.target.value,
+                      label: event.target.value,
                     }))
                   }
-                >
-                  <option value="">
-                    {availableSigningTags.length > 0
-                      ? "Select a loaded tag"
-                      : "Load tags or enter manually"}
-                  </option>
-                  {availableSigningTags.map((tag) => (
-                    <option key={tag} value={tag}>
-                      {tag}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <span className="field-help">
-                The selected registry is both the tag source and the verification target.
-              </span>
+                />
+              </label>
+
+              <label className="field-shell">
+                <span className="field-label">Freeze Date</span>
+                <input
+                  type="date"
+                  value={countdownForm.date}
+                  onChange={(event) =>
+                    setCountdownForm((current) => ({
+                      ...current,
+                      date: event.target.value,
+                    }))
+                  }
+                />
+              </label>
             </div>
-          </div>
 
-          {tagBanner ? (
-            <div className={`status-banner ${tagBanner.kind}`}>{tagBanner.message}</div>
-          ) : null}
-
-          <div className="button-row" style={{ marginTop: "18px" }}>
-            <button className="primary-button" disabled={isSigningPending} type="submit">
-              {isSigningPending ? "Running..." : "Run Signing Check"}
-            </button>
-          </div>
-
-          {signingBanner ? (
-            <div className={`status-banner ${signingBanner.kind}`}>
-              {signingBanner.message}
-            </div>
-          ) : null}
-
-          <pre className="terminal-output">
-            {signingOutput ||
-              "No signing check output yet. Choose an image and version, then run the verifier."}
-          </pre>
-        </form>
-      </section>
+            <article className="countdown-card">
+              {countdown ? (
+                <>
+                  <p className="small-label">{countdown.label}</p>
+                  <p className="countdown-value">
+                    {countdown.days > 0
+                      ? `${countdown.days} day${countdown.days === 1 ? "" : "s"} left`
+                      : countdown.days === 0
+                        ? "Freeze is today"
+                        : `${Math.abs(countdown.days)} day${Math.abs(countdown.days) === 1 ? "" : "s"} past`}
+                  </p>
+                  <p className="stat-meta">Target date: {countdown.dateLabel}</p>
+                </>
+              ) : (
+                <>
+                  <p className="small-label">No freeze date yet</p>
+                  <p className="helper-text">
+                    Pick a date and this panel will show the countdown instantly.
+                  </p>
+                </>
+              )}
+            </article>
+          </section>
+        </div>
+      ) : null}
     </section>
   );
 }
