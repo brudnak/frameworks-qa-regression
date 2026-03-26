@@ -571,9 +571,17 @@ html:not([data-theme="light-ranch-house"]):not([data-theme="dark-suse-green"]):n
   align-items: center;
   gap: 10px;
   color: var(--foreground);
+  align-self: start;
 }
 
-.check-shell input {
+.check-shell input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
   accent-color: var(--accent-deep);
 }
 
