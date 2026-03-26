@@ -816,12 +816,17 @@ html:not([data-theme="light-ranch-house"]):not([data-theme="dark-suse-green"]):n
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--danger) 10%, transparent);
 }
 
-.user-card-header,
-.radar-toolbar {
+.user-card-header {
   display: flex;
   justify-content: space-between;
   gap: 16px;
   align-items: start;
+}
+
+.radar-toolbar {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 18px;
 }
 
 .user-card h4,
@@ -890,8 +895,7 @@ html:not([data-theme="light-ranch-house"]):not([data-theme="dark-suse-green"]):n
 }
 
 .radar-search {
-  flex: 1 1 320px;
-  min-width: 0;
+  width: min(100%, 640px);
 }
 
 .qa-none-section {
@@ -945,9 +949,6 @@ html:not([data-theme="light-ranch-house"]):not([data-theme="dark-suse-green"]):n
     flex-direction: column;
   }
 
-  .radar-toolbar {
-    flex-wrap: wrap;
-  }
 }
 
 @media (max-width: 720px) {
