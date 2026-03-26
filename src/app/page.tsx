@@ -20,12 +20,11 @@ export default async function Home() {
       <main className="page-shell">
         <section className="hero-panel">
           <div className="hero-copy">
-            <p className="eyebrow">Rancher QA Launcher</p>
-            <h1>Kick off GitHub Actions runs without digging through repo menus.</h1>
+            <p className="eyebrow">Rancher QA Workspace</p>
+            <h1>One place for QA runs, milestone reporting, and release checks.</h1>
             <p className="hero-text">
-              Launch framework suites against one of four saved Rancher
-              profiles, tag runs by Rancher version, and see recent results
-              grouped into a cleaner dashboard.
+              Launch workflows, review issue ownership, and run release
+              utilities without bouncing between repos and dashboards.
             </p>
           </div>
 

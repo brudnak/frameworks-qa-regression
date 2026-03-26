@@ -495,6 +495,12 @@ html:not([data-theme="light-ranch-house"]):not([data-theme="dark-suse-green"]):n
   gap: 18px;
 }
 
+.tools-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+}
+
 .panel {
   background: var(--panel);
   border-radius: 28px;

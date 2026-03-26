@@ -598,7 +598,7 @@ export function LauncherDashboard({
       {activeTab === "radar" ? <IssueRadarPanel defaults={issueRadarDefaults} /> : null}
 
       {activeTab === "tools" ? (
-        <div className="dashboard-grid">
+        <div className="tools-grid">
           <section className="panel">
             <div className="panel-header">
               <div>
