@@ -77,6 +77,24 @@ export function requireGitHubRepoConfig() {
   return config;
 }
 
+export function getIssueRadarDefaults() {
+  const users = parseCsv(
+    process.env.ISSUE_RADAR_USERS ??
+      [process.env.DEFAULT_USER_A, process.env.DEFAULT_USER_B]
+        .filter(Boolean)
+        .join(","),
+  );
+
+  return {
+    repo: process.env.ISSUE_RADAR_REPO ?? process.env.DEFAULT_TARGET_REPO ?? "rancher/rancher",
+    label:
+      process.env.ISSUE_RADAR_LABEL ??
+      process.env.DEFAULT_TARGET_LABEL ??
+      "team/frameworks",
+    users: users.length > 0 ? users : ["brudnak", "fillipehmeireles"],
+  };
+}
+
 export function getGitHubAuthConfig() {
   return {
     clientId: process.env.AUTH_GITHUB_ID ?? "",

@@ -1,5 +1,6 @@
 import sodium from "libsodium-wrappers";
 import {
+  getIssueRadarDefaults,
   getProfiles,
   requireGitHubRepoConfig,
   workflowDefinitions,
@@ -263,5 +264,6 @@ export async function getDashboardData() {
     workflows: workflowDefinitions,
     recentRuns,
     versionSummaries: summarizeVersions(recentRuns),
+    issueRadarDefaults: getIssueRadarDefaults(),
   };
 }

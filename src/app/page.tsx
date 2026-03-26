@@ -84,6 +84,7 @@ export default async function Home() {
             workflows={dashboardData.workflows}
             recentRuns={dashboardData.recentRuns}
             versionSummaries={dashboardData.versionSummaries}
+            issueRadarDefaults={dashboardData.issueRadarDefaults}
           />
         ) : null}
       </main>

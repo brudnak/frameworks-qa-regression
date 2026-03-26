@@ -4,6 +4,8 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { VersionSummary, WorkflowRunSummary } from "@/lib/github";
 import type { WorkflowDefinition } from "@/lib/config";
+import type { IssueRadarDefaults } from "@/lib/issue-radar";
+import { IssueRadarPanel } from "@/components/issue-radar-panel";
 
 type DashboardProps = {
   login?: string;
@@ -13,6 +15,7 @@ type DashboardProps = {
   workflows: WorkflowDefinition[];
   recentRuns: WorkflowRunSummary[];
   versionSummaries: VersionSummary[];
+  issueRadarDefaults: IssueRadarDefaults;
 };
 
 type BannerState =
@@ -20,7 +23,7 @@ type BannerState =
   | { kind: "error"; message: string }
   | null;
 
-type DashboardTab = "launch" | "reports" | "tools";
+type DashboardTab = "launch" | "reports" | "radar" | "tools";
 
 function formatWhen(value: string) {
   return new Intl.DateTimeFormat("en-US", {
@@ -41,16 +44,6 @@ function getConclusionClass(run: WorkflowRunSummary) {
   return "pending";
 }
 
-function parseLocalDate(value: string) {
-  const [year, month, day] = value.split("-").map(Number);
-
-  if (!year || !month || !day) {
-    return null;
-  }
-
-  return new Date(year, month - 1, day);
-}
-
 export function LauncherDashboard({
   login,
   owner,
@@ -59,6 +52,7 @@ export function LauncherDashboard({
   workflows,
   recentRuns,
   versionSummaries,
+  issueRadarDefaults,
 }: DashboardProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -89,48 +83,12 @@ export function LauncherDashboard({
     registry: "docker.io",
     version: "",
   });
-  const [countdownForm, setCountdownForm] = useState({
-    label: "Code freeze",
-    date: "",
-  });
 
   const topSummary = useMemo(() => versionSummaries.slice(0, 4), [versionSummaries]);
   const selectedWorkflow = workflows.find(
     (workflow) => workflow.id === form.workflowId,
   );
   const needsTenantRancher = !!selectedWorkflow?.requiresTenantRancher;
-  const countdown = useMemo(() => {
-    const target = parseLocalDate(countdownForm.date);
-
-    if (!target) {
-      return null;
-    }
-
-    const today = new Date();
-    const todayAtMidnight = new Date(
-      today.getFullYear(),
-      today.getMonth(),
-      today.getDate(),
-    );
-    const targetAtMidnight = new Date(
-      target.getFullYear(),
-      target.getMonth(),
-      target.getDate(),
-    );
-    const days = Math.round(
-      (targetAtMidnight.getTime() - todayAtMidnight.getTime()) / 86_400_000,
-    );
-
-    return {
-      dateLabel: target.toLocaleDateString("en-US", {
-        month: "long",
-        day: "numeric",
-        year: "numeric",
-      }),
-      days,
-      label: countdownForm.label.trim() || "Code freeze",
-    };
-  }, [countdownForm.date, countdownForm.label]);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -284,6 +242,7 @@ export function LauncherDashboard({
         {[
           ["launch", "Launch QA"],
           ["reports", "QA Reports"],
+          ["radar", "Issue Radar"],
           ["tools", "Tools"],
         ].map(([tab, label]) => (
           <button
@@ -636,6 +595,8 @@ export function LauncherDashboard({
         </>
       ) : null}
 
+      {activeTab === "radar" ? <IssueRadarPanel defaults={issueRadarDefaults} /> : null}
+
       {activeTab === "tools" ? (
         <div className="dashboard-grid">
           <section className="panel">
@@ -774,70 +735,6 @@ export function LauncherDashboard({
             </form>
           </section>
 
-          <section className="panel">
-            <div className="panel-header">
-              <div>
-                <p className="section-label">Countdown</p>
-                <h3 className="panel-title">Days Until Code Freeze</h3>
-                <p className="field-help">
-                  Drop in the next freeze date and this will give you a quick countdown.
-                </p>
-              </div>
-            </div>
-
-            <div className="field-grid">
-              <label className="field-shell">
-                <span className="field-label">Label</span>
-                <input
-                  placeholder="Rancher v2.14 code freeze"
-                  value={countdownForm.label}
-                  onChange={(event) =>
-                    setCountdownForm((current) => ({
-                      ...current,
-                      label: event.target.value,
-                    }))
-                  }
-                />
-              </label>
-
-              <label className="field-shell">
-                <span className="field-label">Freeze Date</span>
-                <input
-                  type="date"
-                  value={countdownForm.date}
-                  onChange={(event) =>
-                    setCountdownForm((current) => ({
-                      ...current,
-                      date: event.target.value,
-                    }))
-                  }
-                />
-              </label>
-            </div>
-
-            <article className="countdown-card">
-              {countdown ? (
-                <>
-                  <p className="small-label">{countdown.label}</p>
-                  <p className="countdown-value">
-                    {countdown.days > 0
-                      ? `${countdown.days} day${countdown.days === 1 ? "" : "s"} left`
-                      : countdown.days === 0
-                        ? "Freeze is today"
-                        : `${Math.abs(countdown.days)} day${Math.abs(countdown.days) === 1 ? "" : "s"} past`}
-                  </p>
-                  <p className="stat-meta">Target date: {countdown.dateLabel}</p>
-                </>
-              ) : (
-                <>
-                  <p className="small-label">No freeze date yet</p>
-                  <p className="helper-text">
-                    Pick a date and this panel will show the countdown instantly.
-                  </p>
-                </>
-              )}
-            </article>
-          </section>
         </div>
       ) : null}
     </section>
