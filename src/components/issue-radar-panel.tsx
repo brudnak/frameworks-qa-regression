@@ -1,7 +1,11 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import type { IssueRadarDefaults, IssueRadarReport } from "@/lib/issue-radar";
+import type {
+  IssueRadarBrief,
+  IssueRadarDefaults,
+  IssueRadarReport,
+} from "@/lib/issue-radar";
 
 type BannerState =
   | { kind: "success"; message: string }
@@ -29,10 +33,14 @@ export function IssueRadarPanel({ defaults }: IssueRadarPanelProps) {
   const [banner, setBanner] = useState<BannerState>(null);
   const [report, setReport] = useState<IssueRadarReport | null>(null);
   const [reportMessage, setReportMessage] = useState("");
+  const [brief, setBrief] = useState<IssueRadarBrief | null>(null);
+  const [briefBanner, setBriefBanner] = useState<BannerState>(null);
+  const [briefMessage, setBriefMessage] = useState("");
   const [activeFilter, setActiveFilter] = useState<
     "all" | "problems" | "clean" | "qa-none"
   >("all");
   const [searchTerm, setSearchTerm] = useState("");
+  const [isBriefPending, startBriefTransition] = useTransition();
   const [form, setForm] = useState({
     milestone: "",
     repo: defaults.repo,
@@ -40,6 +48,8 @@ export function IssueRadarPanel({ defaults }: IssueRadarPanelProps) {
     users: defaultUsers,
     githubToken: "",
     codeFreezeDate: "",
+    includeHistory: true,
+    historyLimit: 30,
   });
 
   const countdown = useMemo(() => {
@@ -153,11 +163,77 @@ export function IssueRadarPanel({ defaults }: IssueRadarPanelProps) {
 
       setReport(payload.report);
       setReportMessage(payload.message ?? "Report generated from the GitHub API.");
+      setBrief(null);
+      setBriefMessage("");
+      setBriefBanner(null);
       setBanner({
         kind: "success",
         message: "Issue radar loaded.",
       });
     });
+  }
+
+  function handleBuildBrief() {
+    setBriefBanner(null);
+
+    startBriefTransition(async () => {
+      const response = await fetch("/api/issue-radar-brief", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          milestone: form.milestone,
+          repo: form.repo,
+          label: form.label,
+          users: form.users,
+          githubToken: form.githubToken,
+          codeFreezeDate: form.codeFreezeDate,
+          includeHistory: form.includeHistory,
+          historyLimit: form.historyLimit,
+        }),
+      });
+
+      const payload = (await response.json()) as {
+        error?: string;
+        message?: string;
+        brief?: IssueRadarBrief;
+      };
+
+      if (!response.ok || !payload.brief) {
+        setBriefBanner({
+          kind: "error",
+          message: payload.error ?? "Unable to build the assignment brief right now.",
+        });
+        return;
+      }
+
+      setBrief(payload.brief);
+      setBriefMessage(payload.message ?? "Assignment brief ready to copy.");
+      setBriefBanner({
+        kind: "success",
+        message: "Assignment brief built.",
+      });
+    });
+  }
+
+  async function handleCopyBrief() {
+    if (!brief?.text) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(brief.text);
+      setBriefBanner({
+        kind: "success",
+        message: "Assignment brief copied.",
+      });
+    } catch {
+      setBriefBanner({
+        kind: "error",
+        message: "Clipboard access failed. You can still copy the brief manually.",
+      });
+    }
   }
 
   function updateUser(index: number, value: string) {
@@ -299,11 +375,57 @@ export function IssueRadarPanel({ defaults }: IssueRadarPanelProps) {
                   Use one to eight GitHub logins. Each in-scope issue should ideally land on exactly one person from this list.
                 </span>
               </div>
+
+              <div className="field-shell full-width">
+                <span className="field-label">Brief Options</span>
+                <label className="check-shell">
+                  <input
+                    checked={form.includeHistory}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        includeHistory: event.target.checked,
+                      }))
+                    }
+                    type="checkbox"
+                  />
+                  <span>Include recent closed issue samples for the selected owners</span>
+                </label>
+                <div className="field-grid compact-grid">
+                  <label className="field-shell">
+                    <span className="field-label">History Sample Size</span>
+                    <select
+                      disabled={!form.includeHistory}
+                      value={String(form.historyLimit)}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          historyLimit: Number(event.target.value) === 50 ? 50 : 30,
+                        }))
+                      }
+                    >
+                      <option value="30">Last 30 per owner</option>
+                      <option value="50">Last 50 per owner</option>
+                    </select>
+                  </label>
+                </div>
+                <span className="field-help">
+                  This builds a paste-ready assignment brief from the current milestone board.
+                </span>
+              </div>
             </div>
 
             <div className="button-row" style={{ marginTop: "18px" }}>
               <button className="primary-button" disabled={isPending} type="submit">
                 {isPending ? "Loading..." : "Run Issue Radar"}
+              </button>
+              <button
+                className="secondary-button"
+                disabled={isBriefPending}
+                onClick={handleBuildBrief}
+                type="button"
+              >
+                {isBriefPending ? "Building..." : "Build Assignment Brief"}
               </button>
             </div>
 
@@ -365,6 +487,38 @@ export function IssueRadarPanel({ defaults }: IssueRadarPanelProps) {
 
       {report ? (
         <>
+          <section className="panel">
+            <div className="panel-header">
+              <div>
+                <p className="section-label">Assignment Brief</p>
+                <h3 className="panel-title">Copy-ready handoff</h3>
+                <p className="field-help">
+                  Build a clean text block from the live board, then paste it wherever you want to review assignment recommendations.
+                </p>
+              </div>
+              {brief ? (
+                <button className="ghost-button" onClick={handleCopyBrief} type="button">
+                  Copy brief
+                </button>
+              ) : null}
+            </div>
+
+            {briefMessage ? <p className="helper-text">{briefMessage}</p> : null}
+            {briefBanner ? (
+              <div className={`status-banner ${briefBanner.kind}`}>{briefBanner.message}</div>
+            ) : null}
+
+            <div className="field-shell">
+              <span className="field-label">Brief Text</span>
+              <textarea
+                className="brief-output"
+                placeholder="Build the assignment brief and it will show up here."
+                readOnly
+                value={brief?.text ?? ""}
+              />
+            </div>
+          </section>
+
           <section className="panel">
             <div className="panel-header">
               <div>

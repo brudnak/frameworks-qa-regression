@@ -19,6 +19,9 @@ type GitHubIssue = {
   number: number;
   title: string;
   html_url: string;
+  body?: string | null;
+  closed_at?: string | null;
+  created_at?: string | null;
   labels: Array<{ name?: string }>;
   assignees: Array<{ login?: string }>;
   pull_request?: Record<string, unknown>;
@@ -36,6 +39,12 @@ export type IssueRadarConfig = {
   label: string;
   users: string[];
   token?: string;
+};
+
+export type IssueRadarBriefConfig = IssueRadarConfig & {
+  codeFreezeDate?: string;
+  includeHistory?: boolean;
+  historyLimit?: number;
 };
 
 export type IssueSummary = {
@@ -108,6 +117,22 @@ export type IssueRadarReport = {
   kindRows: KindRow[];
   qaNone: IssueSummary[];
   buckets: IssueBucket[];
+};
+
+export type IssueHistorySample = {
+  number: number;
+  title: string;
+  url: string;
+  closedAt: string;
+  labels: string[];
+  snippet: string;
+};
+
+export type IssueRadarBrief = {
+  generatedAt: string;
+  includeHistory: boolean;
+  historyLimit: number;
+  text: string;
 };
 
 function getHeaders(token?: string) {
@@ -251,8 +276,109 @@ async function fetchIssues(config: IssueRadarConfig) {
   return issues;
 }
 
+async function fetchClosedIssuesForUser(
+  config: IssueRadarConfig,
+  user: string,
+  limit: number,
+) {
+  const { owner, repo } = parseRepo(config.repo);
+  const token = resolveGitHubToken(config.token);
+  const issues: GitHubIssue[] = [];
+
+  for (let page = 1; issues.length < limit; page += 1) {
+    const pageIssues = await githubRequest<GitHubIssue[]>(
+      `/repos/${owner}/${repo}/issues`,
+      {
+        query: new URLSearchParams({
+          state: "closed",
+          assignee: user,
+          sort: "updated",
+          direction: "desc",
+          per_page: "100",
+          page: String(page),
+        }),
+        token,
+      },
+    );
+
+    issues.push(
+      ...pageIssues.filter(
+        (issue) => !issue.pull_request && typeof issue.closed_at === "string",
+      ),
+    );
+
+    if (pageIssues.length < 100) {
+      break;
+    }
+  }
+
+  return issues
+    .sort((left, right) => {
+      const leftTime = left.closed_at ? Date.parse(left.closed_at) : 0;
+      const rightTime = right.closed_at ? Date.parse(right.closed_at) : 0;
+      return rightTime - leftTime;
+    })
+    .slice(0, limit);
+}
+
 function contains(values: string[], target: string) {
   return values.includes(target);
+}
+
+function formatDateLabel(value?: string | null) {
+  if (!value) {
+    return "Unknown";
+  }
+
+  const dateOnlyMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const parsed = dateOnlyMatch
+    ? new Date(
+        Number(dateOnlyMatch[1]),
+        Number(dateOnlyMatch[2]) - 1,
+        Number(dateOnlyMatch[3]),
+      )
+    : new Date(value);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+
+  return parsed.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function normalizeWhitespace(value: string) {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function stripMarkdown(value: string) {
+  return normalizeWhitespace(
+    value
+      .replace(/```[\s\S]*?```/g, " ")
+      .replace(/`([^`]*)`/g, "$1")
+      .replace(/!\[([^\]]*)\]\([^)]+\)/g, "$1")
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+      .replace(/https?:\/\/\S+/g, " ")
+      .replace(/^#+\s*/gm, "")
+      .replace(/[*_>~-]/g, " "),
+  );
+}
+
+function summarizeIssueBody(body?: string | null, limit = 240) {
+  const cleaned = stripMarkdown(body ?? "");
+
+  if (!cleaned) {
+    return "No body snippet available.";
+  }
+
+  if (cleaned.length <= limit) {
+    return cleaned;
+  }
+
+  return `${cleaned.slice(0, limit).trimEnd()}...`;
 }
 
 function determineQaSize(labels: string[]) {
@@ -269,6 +395,27 @@ function determineKind(labels: string[]) {
   }
 
   return LACKS_KIND_LABEL;
+}
+
+function formatIssueLine(issue: IssueSummary) {
+  const labels = [issue.qaSize, issue.kind].join(", ");
+  return `- #${issue.number} ${issue.title}\n  Owners: ${issue.assignees.join(", ")}\n  Labels: ${labels}`;
+}
+
+function formatHistoryLine(issue: IssueHistorySample) {
+  const labels = issue.labels.length > 0 ? issue.labels.join(", ") : "None";
+  return `- #${issue.number} ${issue.title}\n  Closed: ${issue.closedAt}\n  Labels: ${labels}\n  Snippet: ${issue.snippet}`;
+}
+
+function buildHistorySamples(issues: GitHubIssue[]) {
+  return issues.map((issue) => ({
+    number: issue.number,
+    title: issue.title,
+    url: issue.html_url,
+    closedAt: formatDateLabel(issue.closed_at),
+    labels: issue.labels.flatMap((label) => (label.name ? [label.name] : [])),
+    snippet: summarizeIssueBody(issue.body),
+  }));
 }
 
 function extractAssignees(assignees: GitHubIssue["assignees"]) {
@@ -502,6 +649,125 @@ export function buildIssueRadarReport(
   };
 }
 
+export function buildIssueRadarBriefText(
+  report: IssueRadarReport,
+  {
+    codeFreezeDate,
+    includeHistory = false,
+    historyLimit = 30,
+    historyByUser = {},
+  }: {
+    codeFreezeDate?: string;
+    includeHistory?: boolean;
+    historyLimit?: number;
+    historyByUser?: Record<string, IssueHistorySample[]>;
+  } = {},
+) {
+  const lines: string[] = [];
+  const bucketById = new Map(report.buckets.map((bucket) => [bucket.id, bucket]));
+  const missingOwner = bucketById.get("missing-owner");
+  const overAssigned = bucketById.get("over-assigned");
+
+  lines.push("Assignment review brief");
+  lines.push("");
+  lines.push(`Repo: ${report.config.repo}`);
+  lines.push(`Milestone: ${report.config.milestone}`);
+  lines.push(`Team label: ${report.config.label}`);
+  lines.push(`Selected owners: ${report.config.users.join(", ")}`);
+
+  if (codeFreezeDate?.trim()) {
+    lines.push(`Code freeze: ${formatDateLabel(codeFreezeDate)}`);
+  }
+
+  lines.push(
+    "Assignment rule: every non-QA/None issue should have exactly one selected owner.",
+  );
+  lines.push("");
+  lines.push("Current milestone snapshot");
+  lines.push(`- Fetched issues: ${report.totals.grandTotalFetched}`);
+  lines.push(`- Categorized issues: ${report.totals.totalCategorized}`);
+  lines.push(`- Exactly one selected owner: ${report.totals.exactlyOne}`);
+  lines.push(`- Missing a selected owner: ${report.totals.missingOwner}`);
+  lines.push(`- Assigned to multiple selected owners: ${report.totals.overAssigned}`);
+  lines.push(`- QA/None: ${report.totals.qaNone}`);
+  lines.push("");
+
+  lines.push("Single-owner load");
+  for (const card of report.userCards) {
+    lines.push(
+      `- ${card.displayName}: ${card.issueCount} clean issues, ${card.bugCount} bugs, ${card.enhanceCount} enhancements, ${card.otherCount} other/untyped, ${card.lacksQaSize} missing QA size`,
+    );
+  }
+
+  lines.push("");
+  lines.push("Issues needing attention");
+
+  if (missingOwner) {
+    lines.push(`Missing a selected owner (${missingOwner.count})`);
+    if (missingOwner.issues.length > 0) {
+      lines.push(...missingOwner.issues.map((issue) => formatIssueLine(issue)));
+    } else {
+      lines.push("- None.");
+    }
+    lines.push("");
+  }
+
+  if (overAssigned) {
+    lines.push(`Assigned to multiple selected owners (${overAssigned.count})`);
+    if (overAssigned.issues.length > 0) {
+      lines.push(...overAssigned.issues.map((issue) => formatIssueLine(issue)));
+    } else {
+      lines.push("- None.");
+    }
+    lines.push("");
+  }
+
+  lines.push("Clean owner lanes");
+  for (const user of report.config.users) {
+    const bucket = bucketById.get(`solo-${user}`);
+
+    lines.push(`${user} (${bucket?.count ?? 0})`);
+    if (bucket && bucket.issues.length > 0) {
+      lines.push(...bucket.issues.map((issue) => formatIssueLine(issue)));
+    } else {
+      lines.push("- None.");
+    }
+    lines.push("");
+  }
+
+  if (report.qaNone.length > 0) {
+    lines.push(`QA/None (${report.qaNone.length})`);
+    lines.push(...report.qaNone.map((issue) => formatIssueLine(issue)));
+    lines.push("");
+  }
+
+  if (includeHistory) {
+    lines.push(`Recent closed issue samples by owner (last ${historyLimit})`);
+    for (const user of report.config.users) {
+      const history = historyByUser[user] ?? [];
+      lines.push(`${user} (${history.length})`);
+      if (history.length > 0) {
+        lines.push(...history.map((issue) => formatHistoryLine(issue)));
+      } else {
+        lines.push("- None collected.");
+      }
+      lines.push("");
+    }
+  }
+
+  lines.push(
+    "Review this board and recommend the best owner for each issue that still needs attention while keeping work balanced across the selected owners.",
+  );
+
+  if (includeHistory) {
+    lines.push(
+      "Use the recent closed issue samples as background for the kinds of issues each person has handled before.",
+    );
+  }
+
+  return lines.join("\n");
+}
+
 export function validateIssueRadarConfig(config: IssueRadarConfig) {
   const normalizedUsers = normalizeUsers(config.users);
 
@@ -533,6 +799,10 @@ export function validateIssueRadarConfig(config: IssueRadarConfig) {
   };
 }
 
+function normalizeHistoryLimit(value?: number) {
+  return value === 50 ? 50 : 30;
+}
+
 export async function generateIssueRadarReport(config: IssueRadarConfig) {
   const normalized = validateIssueRadarConfig(config);
   const issues = await fetchIssues(normalized);
@@ -544,6 +814,45 @@ export async function generateIssueRadarReport(config: IssueRadarConfig) {
     message: usingToken
       ? "Live GitHub data loaded with authenticated API access."
       : "Live GitHub data loaded without a token. Public repos work fine, but rate limits are lower.",
+  };
+}
+
+export async function generateIssueRadarBrief(config: IssueRadarBriefConfig) {
+  const normalized = validateIssueRadarConfig(config);
+  const issues = await fetchIssues(normalized);
+  const report = buildIssueRadarReport(normalized, issues);
+  const includeHistory = Boolean(config.includeHistory);
+  const historyLimit = normalizeHistoryLimit(config.historyLimit);
+  const historyByUser: Record<string, IssueHistorySample[]> = {};
+
+  if (includeHistory) {
+    await Promise.all(
+      normalized.users.map(async (user) => {
+        const closedIssues = await fetchClosedIssuesForUser(
+          normalized,
+          user,
+          historyLimit,
+        );
+        historyByUser[user] = buildHistorySamples(closedIssues);
+      }),
+    );
+  }
+
+  return {
+    brief: {
+      generatedAt: new Date().toISOString(),
+      includeHistory,
+      historyLimit,
+      text: buildIssueRadarBriefText(report, {
+        codeFreezeDate: config.codeFreezeDate,
+        includeHistory,
+        historyLimit,
+        historyByUser,
+      }),
+    },
+    message: includeHistory
+      ? "Assignment brief built with recent closed issue samples."
+      : "Assignment brief built from the live milestone board.",
   };
 }
 
