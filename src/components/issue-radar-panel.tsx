@@ -23,6 +23,8 @@ function parseLocalDate(value: string) {
 }
 
 export function IssueRadarPanel({ defaults }: IssueRadarPanelProps) {
+  const defaultUsers =
+    defaults.users.length > 0 ? defaults.users : ["brudnak", "fillipehmeireles"];
   const [isPending, startTransition] = useTransition();
   const [banner, setBanner] = useState<BannerState>(null);
   const [report, setReport] = useState<IssueRadarReport | null>(null);
@@ -35,7 +37,7 @@ export function IssueRadarPanel({ defaults }: IssueRadarPanelProps) {
     milestone: "",
     repo: defaults.repo,
     label: defaults.label,
-    users: defaults.users.length > 0 ? defaults.users : ["brudnak", "fillipehmeireles"],
+    users: defaultUsers,
     githubToken: "",
     codeFreezeDate: "",
   });
@@ -170,7 +172,13 @@ export function IssueRadarPanel({ defaults }: IssueRadarPanelProps) {
   function addUser() {
     setForm((current) => ({
       ...current,
-      users: current.users.length >= 8 ? current.users : [...current.users, ""],
+      users:
+        current.users.length >= 8
+          ? current.users
+          : [
+              ...current.users,
+              defaultUsers.find((user) => !current.users.includes(user)) ?? "",
+            ],
     }));
   }
 
@@ -360,6 +368,20 @@ export function IssueRadarPanel({ defaults }: IssueRadarPanelProps) {
           <section className="panel">
             <div className="panel-header">
               <div>
+                <p className="section-label">Rule</p>
+                <h3 className="panel-title">Assignment guardrail</h3>
+                <p className="field-help">
+                  Expected: exactly one selected owner on every non-QA/None issue.
+                  Anything in Missing a selected owner or Assigned to multiple selected
+                  owners needs attention before release.
+                </p>
+              </div>
+            </div>
+          </section>
+
+          <section className="panel">
+            <div className="panel-header">
+              <div>
                 <p className="section-label">Report Status</p>
                 <h3 className="panel-title">Live GitHub milestone data</h3>
                 <p className="field-help">
@@ -416,9 +438,14 @@ export function IssueRadarPanel({ defaults }: IssueRadarPanelProps) {
                     <p><strong>{card.otherCount}</strong> other / untyped</p>
                   </div>
                   {card.lacksQaSize > 0 ? (
-                    <p className="user-warning">
-                      Missing QA size on {card.lacksQaSize} issues.
-                    </p>
+                    <>
+                      <p className="user-warning">
+                        Warning: missing QA size on {card.lacksQaSize} issues.
+                      </p>
+                      <p className="user-todo">
+                        TODO: add sizing to {card.lacksQaSize} issues.
+                      </p>
+                    </>
                   ) : (
                     <p className="user-ok">QA sizing is clean for this owner lane.</p>
                   )}
@@ -460,7 +487,7 @@ export function IssueRadarPanel({ defaults }: IssueRadarPanelProps) {
               </div>
 
               <div className="field-shell radar-search">
-                <span className="field-label">Search</span>
+                <span className="field-label">Search issues</span>
                 <input
                   placeholder="Search by issue title or number"
                   value={searchTerm}
@@ -549,6 +576,105 @@ export function IssueRadarPanel({ defaults }: IssueRadarPanelProps) {
                 )}
               </section>
             ) : null}
+          </section>
+
+          <section className="panel">
+            <div className="panel-header">
+              <div>
+                <p className="section-label">Ownership</p>
+                <h3 className="panel-title">Exactly-one-owner check</h3>
+              </div>
+            </div>
+
+            <div className="table-wrap">
+              <table className="radar-table">
+                <thead>
+                  <tr>
+                    <th>Group</th>
+                    <th>Issue count</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {report.assigneeSummary.map((row) => (
+                    <tr key={row.label}>
+                      <td>{row.label}</td>
+                      <td>{row.total}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section className="panel">
+            <div className="panel-header">
+              <div>
+                <p className="section-label">QA Size</p>
+                <h3 className="panel-title">QA size by assignment state</h3>
+              </div>
+            </div>
+
+            <div className="table-wrap">
+              <table className="radar-table">
+                <thead>
+                  <tr>
+                    <th>Group</th>
+                    {report.qaLabels.map((label) => (
+                      <th key={label}>{label}</th>
+                    ))}
+                    <th>Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {report.qaRows.map((row) => (
+                    <tr key={row.label}>
+                      <td>{row.label}</td>
+                      {row.counts.map((count, index) => (
+                        <td key={`${row.label}-${report.qaLabels[index]}`}>{count}</td>
+                      ))}
+                      <td>{row.total}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section className="panel">
+            <div className="panel-header">
+              <div>
+                <p className="section-label">Issue Type</p>
+                <h3 className="panel-title">Clean owner lanes by type</h3>
+              </div>
+            </div>
+
+            <div className="table-wrap">
+              <table className="radar-table">
+                <thead>
+                  <tr>
+                    <th>Owner</th>
+                    <th>Enhancements</th>
+                    <th>Bugs</th>
+                    <th>Other / untyped</th>
+                    <th>Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {report.kindRows.map((row) => (
+                    <tr key={row.displayName}>
+                      <td>{row.displayName}</td>
+                      <td>{row.enhancement}</td>
+                      <td>{row.bug}</td>
+                      <td>{row.other}</td>
+                      <td>{row.total}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="helper-text">
+              This table only counts issues assigned to exactly one selected owner.
+            </p>
           </section>
         </>
       ) : null}

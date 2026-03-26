@@ -853,6 +853,11 @@ html:not([data-theme="light-ranch-house"]):not([data-theme="dark-suse-green"]):n
   color: var(--success);
 }
 
+.user-todo {
+  margin: 0;
+  color: var(--muted);
+}
+
 .issue-list {
   display: grid;
   gap: 10px;
@@ -885,13 +890,38 @@ html:not([data-theme="light-ranch-house"]):not([data-theme="dark-suse-green"]):n
 }
 
 .radar-search {
-  min-width: min(100%, 320px);
+  flex: 1 1 320px;
+  min-width: 0;
 }
 
 .qa-none-section {
   margin-top: 22px;
   padding-top: 8px;
   border-top: 1px solid var(--border);
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+.radar-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.radar-table th,
+.radar-table td {
+  padding: 14px 12px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.radar-table th {
+  color: var(--muted);
+  font-size: 0.82rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 @media (max-width: 960px) {
@@ -913,6 +943,10 @@ html:not([data-theme="light-ranch-house"]):not([data-theme="dark-suse-green"]):n
   .dashboard-header {
     align-items: start;
     flex-direction: column;
+  }
+
+  .radar-toolbar {
+    flex-wrap: wrap;
   }
 }
 
