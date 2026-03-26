@@ -269,198 +269,31 @@ export function IssueRadarPanel({ defaults }: IssueRadarPanelProps) {
 
   return (
     <section className="dashboard-shell">
-      <div className="dashboard-grid radar-top-grid">
-        <section className="panel">
-          <div className="panel-header">
-            <div>
-              <p className="section-label">Issue Radar</p>
-              <h3 className="panel-title">Milestone assignment board</h3>
-              <p className="field-help">
-                Pull a live milestone report from GitHub and split issues into owner lanes,
-                problem lanes, and QA/None.
-              </p>
-            </div>
+      <section className="panel">
+        <div className="panel-header">
+          <div>
+            <p className="section-label">Code Freeze</p>
+            <h3 className="panel-title">Countdown</h3>
+            <p className="field-help">
+              Keep the milestone board grounded against the next freeze date.
+            </p>
           </div>
+        </div>
 
-          <form onSubmit={handleSubmit}>
-            <div className="field-grid">
-              <label className="field-shell">
-                <span className="field-label">Milestone</span>
-                <input
-                  placeholder="v2.14.0"
-                  value={form.milestone}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      milestone: event.target.value,
-                    }))
-                  }
-                />
-              </label>
-
-              <label className="field-shell">
-                <span className="field-label">Repository</span>
-                <input
-                  placeholder="rancher/rancher"
-                  value={form.repo}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      repo: event.target.value,
-                    }))
-                  }
-                />
-              </label>
-
-              <label className="field-shell">
-                <span className="field-label">Team Label</span>
-                <input
-                  placeholder="team/frameworks"
-                  value={form.label}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      label: event.target.value,
-                    }))
-                  }
-                />
-              </label>
-
-              <label className="field-shell">
-                <span className="field-label">GitHub Token</span>
-                <input
-                  type="password"
-                  placeholder="Optional, used only for this request"
-                  value={form.githubToken}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      githubToken: event.target.value,
-                    }))
-                  }
-                />
-              </label>
-
-              <div className="field-shell full-width">
-                <span className="field-label">Selected Owners</span>
-                <div className="owner-list">
-                  {form.users.map((user, index) => (
-                    <div className="owner-row" key={`${index}-${user}`}>
-                      <input
-                        placeholder="GitHub login"
-                        value={user}
-                        onChange={(event) => updateUser(index, event.target.value)}
-                      />
-                      <button
-                        className="ghost-button owner-remove"
-                        onClick={() => removeUser(index)}
-                        type="button"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  ))}
-                </div>
-                <div className="button-row">
-                  <button
-                    className="ghost-button"
-                    disabled={form.users.length >= 8}
-                    onClick={addUser}
-                    type="button"
-                  >
-                    Add owner
-                  </button>
-                </div>
-                <span className="field-help">
-                  Use one to eight GitHub logins. Each in-scope issue should ideally land on exactly one person from this list.
-                </span>
-              </div>
-
-              <div className="field-shell full-width">
-                <span className="field-label">Brief Options</span>
-                <label className="check-shell">
-                  <input
-                    checked={form.includeHistory}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        includeHistory: event.target.checked,
-                      }))
-                    }
-                    type="checkbox"
-                  />
-                  <span>Include recent closed issue samples for the selected owners</span>
-                </label>
-                <div className="field-grid compact-grid">
-                  <label className="field-shell">
-                    <span className="field-label">History Sample Size</span>
-                    <select
-                      disabled={!form.includeHistory}
-                      value={String(form.historyLimit)}
-                      onChange={(event) =>
-                        setForm((current) => ({
-                          ...current,
-                          historyLimit: Number(event.target.value) === 50 ? 50 : 30,
-                        }))
-                      }
-                    >
-                      <option value="30">Last 30 per owner</option>
-                      <option value="50">Last 50 per owner</option>
-                    </select>
-                  </label>
-                </div>
-                <span className="field-help">
-                  This builds a paste-ready assignment brief from the current milestone board.
-                </span>
-              </div>
-            </div>
-
-            <div className="button-row" style={{ marginTop: "18px" }}>
-              <button className="primary-button" disabled={isPending} type="submit">
-                {isPending ? "Loading..." : "Run Issue Radar"}
-              </button>
-              <button
-                className="secondary-button"
-                disabled={isBriefPending}
-                onClick={handleBuildBrief}
-                type="button"
-              >
-                {isBriefPending ? "Building..." : "Build Assignment Brief"}
-              </button>
-            </div>
-
-            {banner ? (
-              <div className={`status-banner ${banner.kind}`}>{banner.message}</div>
-            ) : null}
-          </form>
-        </section>
-
-        <section className="panel">
-          <div className="panel-header">
-            <div>
-              <p className="section-label">Code Freeze</p>
-              <h3 className="panel-title">Countdown</h3>
-              <p className="field-help">
-                Keep the milestone board grounded against the next freeze date.
-              </p>
-            </div>
-          </div>
-
-          <div className="field-grid">
-            <label className="field-shell full-width">
-              <span className="field-label">Freeze Date</span>
-              <input
-                type="date"
-                value={form.codeFreezeDate}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    codeFreezeDate: event.target.value,
-                  }))
-                }
-              />
-            </label>
-          </div>
+        <div className="field-grid radar-freeze-grid">
+          <label className="field-shell">
+            <span className="field-label">Freeze Date</span>
+            <input
+              type="date"
+              value={form.codeFreezeDate}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  codeFreezeDate: event.target.value,
+                }))
+              }
+            />
+          </label>
 
           <article className="countdown-card">
             {countdown ? (
@@ -482,8 +315,179 @@ export function IssueRadarPanel({ defaults }: IssueRadarPanelProps) {
               </>
             )}
           </article>
-        </section>
-      </div>
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="panel-header">
+          <div>
+            <p className="section-label">Issue Radar</p>
+            <h3 className="panel-title">Milestone assignment board</h3>
+            <p className="field-help">
+              Pull a live milestone report from GitHub and split issues into owner lanes,
+              problem lanes, and QA/None.
+            </p>
+          </div>
+        </div>
+
+        <form onSubmit={handleSubmit}>
+          <div className="field-grid">
+            <label className="field-shell">
+              <span className="field-label">Milestone</span>
+              <input
+                placeholder="v2.14.0"
+                value={form.milestone}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    milestone: event.target.value,
+                  }))
+                }
+              />
+            </label>
+
+            <label className="field-shell">
+              <span className="field-label">Repository</span>
+              <input
+                placeholder="rancher/rancher"
+                value={form.repo}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    repo: event.target.value,
+                  }))
+                }
+              />
+            </label>
+
+            <label className="field-shell">
+              <span className="field-label">Team Label</span>
+              <input
+                placeholder="team/frameworks"
+                value={form.label}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    label: event.target.value,
+                  }))
+                }
+              />
+            </label>
+
+            <label className="field-shell">
+              <span className="field-label">GitHub Token</span>
+              <input
+                type="password"
+                placeholder="Optional, used only for this request"
+                value={form.githubToken}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    githubToken: event.target.value,
+                  }))
+                }
+              />
+            </label>
+
+            <div className="field-shell full-width">
+              <span className="field-label">Selected Owners</span>
+              <div className="owner-list">
+                {form.users.map((user, index) => (
+                  <div className="owner-row" key={`${index}-${user}`}>
+                    <input
+                      placeholder="GitHub login"
+                      value={user}
+                      onChange={(event) => updateUser(index, event.target.value)}
+                    />
+                    <button
+                      className="ghost-button owner-remove"
+                      onClick={() => removeUser(index)}
+                      type="button"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div className="button-row">
+                <button
+                  className="ghost-button"
+                  disabled={form.users.length >= 8}
+                  onClick={addUser}
+                  type="button"
+                >
+                  Add owner
+                </button>
+              </div>
+              <span className="field-help">
+                Use one to eight GitHub logins. Each in-scope issue should ideally land on exactly one person from this list.
+              </span>
+            </div>
+
+            <div className="field-shell full-width">
+              <span className="field-label">Brief Options</span>
+              <label className="check-shell">
+                <input
+                  checked={form.includeHistory}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      includeHistory: event.target.checked,
+                    }))
+                  }
+                  type="checkbox"
+                />
+                <span>Include recent closed issue samples for the selected owners</span>
+              </label>
+              <div className="field-grid compact-grid">
+                <label className="field-shell">
+                  <span className="field-label">History Sample Size</span>
+                  <select
+                    disabled={!form.includeHistory}
+                    value={String(form.historyLimit)}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        historyLimit: Number(event.target.value) === 50 ? 50 : 30,
+                      }))
+                    }
+                  >
+                    <option value="30">Last 30 per owner</option>
+                    <option value="50">Last 50 per owner</option>
+                  </select>
+                </label>
+              </div>
+              <span className="field-help">
+                This builds a paste-ready assignment brief from the current milestone board.
+              </span>
+            </div>
+          </div>
+
+          <div className="button-row" style={{ marginTop: "18px" }}>
+            <button className="primary-button" disabled={isPending} type="submit">
+              {isPending ? "Loading..." : "Run Issue Radar"}
+            </button>
+            <button
+              className="secondary-button"
+              disabled={isBriefPending || !report}
+              onClick={handleBuildBrief}
+              type="button"
+            >
+              {isBriefPending ? "Building..." : "Build Assignment Brief"}
+            </button>
+          </div>
+
+          {!report ? (
+            <p className="helper-text" style={{ marginTop: "12px" }}>
+              Run the issue radar first, then build the assignment brief from that live board.
+            </p>
+          ) : null}
+
+          {banner ? (
+            <div className={`status-banner ${banner.kind}`}>{banner.message}</div>
+          ) : null}
+        </form>
+      </section>
 
       {report ? (
         <>
