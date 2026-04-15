@@ -74,7 +74,9 @@ async function githubRequest<T>(
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`GitHub API request failed: ${response.status} ${errorText}`);
+    throw new Error(
+      `GitHub API request failed: ${response.status} ${errorText}. Check GITHUB_TOKEN and confirm it still has access to ${owner}/${repo}.`,
+    );
   }
 
   if (response.status === 204) {

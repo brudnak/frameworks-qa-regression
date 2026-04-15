@@ -12,8 +12,24 @@ export const dynamic = "force-dynamic";
 export default async function Home() {
   const session = await getServerSession(authOptions);
   const login = session?.user?.login;
-  const isAuthorized = login ? await isAuthorizedUser(login) : false;
-  const dashboardData = login && isAuthorized ? await getDashboardData() : null;
+  let isAuthorized = false;
+  let dashboardData = null;
+  let githubConfigError: string | null = null;
+
+  if (login) {
+    try {
+      isAuthorized = await isAuthorizedUser(login);
+
+      if (isAuthorized) {
+        dashboardData = await getDashboardData();
+      }
+    } catch (error) {
+      githubConfigError =
+        error instanceof Error
+          ? error.message
+          : "The server-side GitHub configuration failed while loading the dashboard.";
+    }
+  }
 
   return (
     <ThemeFrame>
@@ -64,6 +80,16 @@ export default async function Home() {
               Sign in with GitHub to see the launch form and reporting view for
               your Rancher QA workflows.
             </p>
+          </section>
+        ) : githubConfigError ? (
+          <section className="empty-state">
+            <h2>GitHub server configuration needs attention</h2>
+            <p>
+              Your GitHub account is signed in, but the app could not verify
+              repository access or load dashboard data with its server-side
+              token.
+            </p>
+            <p>{githubConfigError}</p>
           </section>
         ) : !isAuthorized ? (
           <section className="empty-state">

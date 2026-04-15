@@ -31,7 +31,10 @@ export async function isAuthorizedUser(login: string): Promise<boolean> {
   }
 
   if (!response.ok) {
-    throw new Error("Failed to verify repo permissions for the signed-in user.");
+    const errorText = await response.text();
+    throw new Error(
+      `Failed to verify repo permissions for the signed-in user: ${response.status} ${errorText}. Check GITHUB_TOKEN and confirm it can read collaborator permissions for ${owner}/${repo}.`,
+    );
   }
 
   const data = (await response.json()) as {
