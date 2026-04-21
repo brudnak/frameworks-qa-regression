@@ -75,6 +75,7 @@ PY
 create_run_id() {
   local output_file
   local create_args
+  local created_run_id
   output_file="$(mktemp)"
   create_args=(
     testops run create
@@ -89,9 +90,11 @@ create_run_id() {
     create_args+=(--description "$QASE_RUN_DESCRIPTION")
   fi
 
-  qasectl "${create_args[@]}"
-  sed -n 's/^QASE_TESTOPS_RUN_ID=//p' "$output_file"
+  qasectl "${create_args[@]}" >&2
+  created_run_id="$(sed -n 's/^QASE_TESTOPS_RUN_ID=//p' "$output_file")"
   rm -f "$output_file"
+
+  printf '%s\n' "$created_run_id"
 }
 
 resolve_run_id() {
@@ -115,6 +118,11 @@ QASE_RESOLVED_RUN_ID="$(resolve_run_id)"
 if [[ -z "$QASE_RESOLVED_RUN_ID" ]]; then
   echo "Qase upload skipped: unable to resolve a Qase run ID."
   exit 0
+fi
+
+if [[ ! "$QASE_RESOLVED_RUN_ID" =~ ^[0-9]+$ ]]; then
+  echo "Qase upload failed: resolved run ID '$QASE_RESOLVED_RUN_ID' is not numeric."
+  exit 1
 fi
 
 if [[ -n "${QASE_RUN_TITLE:-}" ]]; then
