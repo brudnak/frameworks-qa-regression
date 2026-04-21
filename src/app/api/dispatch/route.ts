@@ -2,7 +2,11 @@ import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
 import { authOptions } from "@/lib/auth";
 import { isAuthorizedUser } from "@/lib/authz";
-import { getProfiles, workflowDefinitions } from "@/lib/config";
+import {
+  buildQaseRunTitle,
+  getProfiles,
+  workflowDefinitions,
+} from "@/lib/config";
 import {
   dispatchWorkflowRun,
   findActiveRunForProfile,
@@ -21,7 +25,6 @@ type LaunchRequest = {
   tenantClusterName?: string;
   notes?: string;
   reportToQase?: boolean;
-  qaseTestRunId?: string;
 };
 
 function badRequest(message: string, status = 400) {
@@ -88,10 +91,6 @@ export async function POST(request: Request) {
     }
   }
 
-  if (body.reportToQase && !body.qaseTestRunId?.trim()) {
-    return badRequest("Qase test run ID is required when Qase reporting is enabled.");
-  }
-
   const activeRun = await findActiveRunForProfile(body.profile);
 
   if (activeRun) {
@@ -136,7 +135,9 @@ export async function POST(request: Request) {
     rancherVersion: body.rancherVersion.trim(),
     notes: body.notes?.trim(),
     reportToQase: body.reportToQase,
-    qaseTestRunId: body.qaseTestRunId?.trim(),
+    qaseRunTitle: body.reportToQase
+      ? buildQaseRunTitle(workflow.label, body.rancherVersion.trim())
+      : undefined,
   });
 
   return NextResponse.json({

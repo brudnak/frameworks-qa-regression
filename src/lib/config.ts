@@ -35,6 +35,20 @@ export const workflowDefinitions: WorkflowDefinition[] = [
   },
 ];
 
+export function normalizeRancherVersionLabel(version: string) {
+  return version.trim().replace(/^v/i, "");
+}
+
+export function normalizeQaseWorkflowLabel(workflowLabel: string) {
+  return workflowLabel.trim().replace(/^Frameworks\s+/i, "");
+}
+
+export function buildQaseRunTitle(workflowLabel: string, rancherVersion: string) {
+  const normalizedVersion = normalizeRancherVersionLabel(rancherVersion);
+  const normalizedWorkflowLabel = normalizeQaseWorkflowLabel(workflowLabel);
+  return `[${normalizedVersion}] Frameworks: ${normalizedWorkflowLabel}`;
+}
+
 function parseCsv(value: string | undefined): string[] {
   return (value ?? "")
     .split(",")

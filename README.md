@@ -96,14 +96,22 @@ Available suites in the launcher:
 - Charts Webhook
 - Hosted Tenant RBAC
 
-Each launch can optionally report JUnit results into an existing Qase run. To
-use that, add these in GitHub for the repository that owns the workflows:
+Each launch can optionally report JUnit results into Qase. To use that, add
+these in GitHub for the repository that owns the workflows:
 
 - `QASE_AUTOMATION_TOKEN` as a GitHub secret
 - `RM_QASE_PROJECT_ID` as a GitHub variable or secret
 
-Then enable `Report this run to Qase` in the launcher and provide the target
-Qase test run ID.
+Then enable `Report this run to Qase` in the launcher. The workflow will create
+or reuse a simple Qase run titled from the Rancher version and selected suite,
+for example:
+
+```text
+[2.14.1] Frameworks: Regression
+```
+
+The launcher strips a leading `v` from the version when it builds the Qase run
+title, so `v2.14.1` becomes `[2.14.1] ...`.
 
 Their run titles are tagged like:
 

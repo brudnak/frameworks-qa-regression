@@ -28,6 +28,10 @@ on:
         description: Existing Qase test run ID to upload into
         required: false
         type: string
+      qase_run_title:
+        description: Qase run title to create or reuse when uploading results
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -39,6 +43,8 @@ jobs:
     env:
       REPORT_TO_QASE: ${{ inputs.report_to_qase }}
       QASE_TEST_RUN_ID: ${{ inputs.qase_test_run_id }}
+      QASE_RUN_TITLE: ${{ inputs.qase_run_title }}
+      QASE_RUN_DESCRIPTION: ${{ inputs.notes }}
     concurrency:
       group: vai-enabled-${{ inputs.profile }}
       cancel-in-progress: false
@@ -79,6 +85,7 @@ jobs:
           echo "Profile: ${{ inputs.profile }}"
           echo "Rancher version: ${{ inputs.rancher_version }}"
           echo "Notes: ${{ inputs.notes }}"
+          echo "Qase run title: ${{ inputs.qase_run_title }}"
 
       - name: Install Dependencies
         run: |

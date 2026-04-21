@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { buildQaseRunTitle } from "@/lib/config";
 import type { VersionSummary, WorkflowRunSummary } from "@/lib/github";
 import type { WorkflowDefinition } from "@/lib/config";
 import type { IssueRadarDefaults } from "@/lib/issue-radar";
@@ -76,7 +77,6 @@ export function LauncherDashboard({
     tenantClusterName: "",
     notes: "",
     reportToQase: false,
-    qaseTestRunId: "",
   });
   const [signingForm, setSigningForm] = useState({
     imageKey: "webhook",
@@ -89,6 +89,13 @@ export function LauncherDashboard({
     (workflow) => workflow.id === form.workflowId,
   );
   const needsTenantRancher = !!selectedWorkflow?.requiresTenantRancher;
+  const qaseRunTitlePreview = useMemo(() => {
+    if (!selectedWorkflow || !form.rancherVersion.trim()) {
+      return "";
+    }
+
+    return buildQaseRunTitle(selectedWorkflow.label, form.rancherVersion);
+  }, [form.rancherVersion, selectedWorkflow]);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -467,20 +474,16 @@ export function LauncherDashboard({
 
               {form.reportToQase ? (
                 <label className="field-shell full-width">
-                  <span className="field-label">Qase Test Run ID</span>
+                  <span className="field-label">Qase Run</span>
                   <input
-                    placeholder="1234"
-                    value={form.qaseTestRunId}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        qaseTestRunId: event.target.value,
-                      }))
-                    }
+                    disabled
+                    readOnly
+                    value={qaseRunTitlePreview || "Enter a Rancher version to name the run."}
                   />
                   <span className="field-help">
                     Uses `RM_QASE_PROJECT_ID` plus `QASE_AUTOMATION_TOKEN` in GitHub
-                    Actions to upload JUnit results into this existing Qase run.
+                    Actions to create or reuse a simple Qase run with this exact
+                    name, then upload the JUnit results into it.
                   </span>
                 </label>
               ) : null}

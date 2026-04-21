@@ -209,6 +209,7 @@ export async function dispatchWorkflowRun(input: {
   rancherVersion: string;
   notes?: string;
   reportToQase?: boolean;
+  qaseRunTitle?: string;
   qaseTestRunId?: string;
 }) {
   const workflow = getWorkflowDefinition(input.workflowId);
@@ -226,6 +227,7 @@ export async function dispatchWorkflowRun(input: {
         rancher_version: input.rancherVersion,
         notes: input.notes ?? "",
         report_to_qase: input.reportToQase ? "true" : "false",
+        qase_run_title: input.qaseRunTitle ?? "",
         qase_test_run_id: input.qaseTestRunId ?? "",
       },
     }),
