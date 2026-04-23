@@ -94,6 +94,7 @@ Available suites in the launcher:
 - Frameworks Regression
 - VAI Enabled
 - Charts Webhook
+- Webhook Security Settings (2.14+)
 - Hosted Tenant RBAC
 
 Each launch can optionally report JUnit results into Qase. To use that, add

@@ -26,6 +26,12 @@ export const workflowDefinitions: WorkflowDefinition[] = [
     description: "Runs the webhook chart validation suite.",
   },
   {
+    id: "webhook-security-settings",
+    file: "webhook-security-settings.yml",
+    label: "Webhook Security Settings (2.14+)",
+    description: "Runs the webhook security settings validation suite for Rancher 2.14+.",
+  },
+  {
     id: "hosted-tenant-rbac",
     file: "hosted-tenant-rbac.yml",
     label: "Hosted Tenant RBAC",

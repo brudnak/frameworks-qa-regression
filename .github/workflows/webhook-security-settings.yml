@@ -1,0 +1,120 @@
+name: Run Webhook Security Settings Suite (2.14+)
+run-name: "rv:${{ inputs.rancher_version }} | profile:${{ inputs.profile }} | suite:webhook-security-settings"
+
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: GitHub environment profile to use for Rancher secrets
+        required: true
+        type: string
+      rancher_version:
+        description: Rancher version label for reporting
+        required: true
+        type: string
+      notes:
+        description: Optional launch notes
+        required: false
+        type: string
+      report_to_qase:
+        description: Upload JUnit results to Qase
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+      qase_test_run_id:
+        description: Existing Qase test run ID to upload into
+        required: false
+        type: string
+      qase_run_title:
+        description: Qase run title to create or reuse when uploading results
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  run-webhook-security-settings:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.profile }}
+    env:
+      REPORT_TO_QASE: ${{ inputs.report_to_qase }}
+      QASE_TEST_RUN_ID: ${{ inputs.qase_test_run_id }}
+      QASE_RUN_TITLE: ${{ inputs.qase_run_title }}
+      QASE_RUN_DESCRIPTION: ${{ inputs.notes }}
+    concurrency:
+      group: webhook-security-settings-${{ inputs.profile }}
+      cancel-in-progress: false
+    steps:
+      - name: Checkout your repository
+        uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
+
+      - name: Setup Go
+        uses: actions/setup-go@7b8cf10d4e4a01d4992d18a89f4d7dc5a3e6d6f4 # v4.3.0
+        with:
+          go-version: "stable"
+
+      - name: Install test tooling
+        run: |
+          go install gotest.tools/gotestsum@latest
+          go install github.com/qase-tms/qasectl@latest
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Clone Rancher Tests Repository
+        run: |
+          git clone https://github.com/rancher/tests.git
+          cd tests
+
+      - name: Create config file
+        run: |
+          cat > cattle-config.yaml <<EOF
+          rancher:
+            host: "${{ secrets.RANCHER_HOST }}"
+            adminToken: "${{ secrets.RANCHER_ADMIN_TOKEN }}"
+            cleanup: true
+            insecure: true
+            clusterName: "${{ secrets.CLUSTER_NAME }}"
+          EOF
+
+      - name: Print run context
+        run: |
+          echo "Profile: ${{ inputs.profile }}"
+          echo "Rancher version: ${{ inputs.rancher_version }}"
+          echo "Notes: ${{ inputs.notes }}"
+          echo "Qase run title: ${{ inputs.qase_run_title }}"
+
+      - name: Run Webhook Security Settings Suite
+        id: webhook-security-settings-test
+        continue-on-error: true
+        env:
+          CATTLE_TEST_CONFIG: ${{ github.workspace }}/cattle-config.yaml
+        run: |
+          cd tests
+          mkdir -p "$GITHUB_WORKSPACE/qase-results"
+          gotestsum \
+            --format standard-verbose \
+            --junitfile "$GITHUB_WORKSPACE/qase-results/webhook-security-settings.xml" \
+            -- \
+            -v -tags=validation,infra.any,cluster.any \
+            ./validation/charts \
+            -run TestWebhookSecuritySettingsTestSuite
+
+      - name: Report results to Qase
+        if: ${{ always() && inputs.report_to_qase == 'true' }}
+        continue-on-error: true
+        env:
+          QASE_PROJECT_CODE: ${{ vars.RM_QASE_PROJECT_ID != '' && vars.RM_QASE_PROJECT_ID || secrets.RM_QASE_PROJECT_ID }}
+          QASE_AUTOMATION_TOKEN: ${{ secrets.QASE_AUTOMATION_TOKEN }}
+        run: |
+          bash .github/scripts/upload-to-qase.sh "$GITHUB_WORKSPACE/qase-results"
+
+      - name: Fail workflow if tests failed
+        if: always()
+        run: |
+          if [[ "${{ steps.webhook-security-settings-test.outcome }}" == "failure" ]]; then
+            echo "Webhook Security Settings suite failed"
+            exit 1
+          fi
