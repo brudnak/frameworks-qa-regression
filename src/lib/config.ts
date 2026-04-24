@@ -20,6 +20,12 @@ export const workflowDefinitions: WorkflowDefinition[] = [
     description: "Runs the VAI-enabled validation suite.",
   },
   {
+    id: "vai-disabled",
+    file: "vai-disabled.yml",
+    label: "VAI Disabled",
+    description: "Runs the VAI-disabled validation suite.",
+  },
+  {
     id: "charts-webhook",
     file: "charts-webhook.yml",
     label: "Charts Webhook",
@@ -43,6 +49,19 @@ export const workflowDefinitions: WorkflowDefinition[] = [
 
 export function normalizeRancherVersionLabel(version: string) {
   return version.trim().replace(/^v/i, "");
+}
+
+export function normalizeRancherHost(host: string) {
+  const withoutProtocol = host
+    .trim()
+    .replace(/^[a-z][a-z0-9+.-]*:\/\//i, "")
+    .replace(/^\/+/, "");
+  const pathStart = withoutProtocol.search(/[/?#]/);
+
+  return (pathStart === -1
+    ? withoutProtocol
+    : withoutProtocol.slice(0, pathStart)
+  ).replace(/\/+$/, "");
 }
 
 export function normalizeQaseWorkflowLabel(workflowLabel: string) {

@@ -5,6 +5,7 @@ import { isAuthorizedUser } from "@/lib/authz";
 import {
   buildQaseRunTitle,
   getProfiles,
+  normalizeRancherHost,
   workflowDefinitions,
 } from "@/lib/config";
 import {
@@ -61,7 +62,10 @@ export async function POST(request: Request) {
     return badRequest("Rancher version is required.");
   }
 
-  if (!body.rancherHost?.trim()) {
+  const rancherHost = normalizeRancherHost(body.rancherHost ?? "");
+  const tenantRancherHost = normalizeRancherHost(body.tenantRancherHost ?? "");
+
+  if (!rancherHost) {
     return badRequest("Rancher URL is required.");
   }
 
@@ -74,7 +78,7 @@ export async function POST(request: Request) {
   }
 
   if (workflow.requiresTenantRancher) {
-    if (!body.tenantRancherHost?.trim()) {
+    if (!tenantRancherHost) {
       return badRequest("Tenant Rancher URL is required for the hosted tenant RBAC suite.");
     }
 
@@ -101,7 +105,7 @@ export async function POST(request: Request) {
   }
 
   await Promise.all([
-    setEnvironmentSecret(body.profile, "RANCHER_HOST", body.rancherHost.trim()),
+    setEnvironmentSecret(body.profile, "RANCHER_HOST", rancherHost),
     setEnvironmentSecret(
       body.profile,
       "RANCHER_ADMIN_TOKEN",
@@ -113,7 +117,7 @@ export async function POST(request: Request) {
           setEnvironmentSecret(
             body.profile,
             "TENANT_RANCHER_HOST",
-            body.tenantRancherHost!.trim(),
+            tenantRancherHost,
           ),
           setEnvironmentSecret(
             body.profile,

@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { buildQaseRunTitle } from "@/lib/config";
+import { buildQaseRunTitle, normalizeRancherHost } from "@/lib/config";
 import type { VersionSummary, WorkflowRunSummary } from "@/lib/github";
 import type { WorkflowDefinition } from "@/lib/config";
 import type { IssueRadarDefaults } from "@/lib/issue-radar";
@@ -25,6 +25,9 @@ type BannerState =
   | null;
 
 type DashboardTab = "launch" | "reports" | "radar" | "tools";
+
+const VERSION_PAGE_SIZE = 4;
+const RUN_PAGE_SIZE = 6;
 
 function formatWhen(value: string) {
   return new Intl.DateTimeFormat("en-US", {
@@ -65,6 +68,13 @@ export function LauncherDashboard({
   const [tagBanner, setTagBanner] = useState<BannerState>(null);
   const [signingOutput, setSigningOutput] = useState("");
   const [availableSigningTags, setAvailableSigningTags] = useState<string[]>([]);
+  const [reportRuns, setReportRuns] = useState(recentRuns);
+  const [reportVersionSummaries, setReportVersionSummaries] =
+    useState(versionSummaries);
+  const [isReportsRefreshing, setIsReportsRefreshing] = useState(false);
+  const [selectedReportRelease, setSelectedReportRelease] = useState("all");
+  const [versionPage, setVersionPage] = useState(0);
+  const [runPage, setRunPage] = useState(0);
   const [form, setForm] = useState({
     workflowId: workflows[0]?.id ?? "",
     profile: profiles[0] ?? "",
@@ -84,7 +94,41 @@ export function LauncherDashboard({
     version: "",
   });
 
-  const topSummary = useMemo(() => versionSummaries.slice(0, 4), [versionSummaries]);
+  const releaseOptions = useMemo(
+    () => reportVersionSummaries.map((summary) => summary.version),
+    [reportVersionSummaries],
+  );
+  const versionPageCount = Math.max(
+    1,
+    Math.ceil(reportVersionSummaries.length / VERSION_PAGE_SIZE),
+  );
+  const pagedVersionSummaries = useMemo(
+    () =>
+      reportVersionSummaries.slice(
+        versionPage * VERSION_PAGE_SIZE,
+        versionPage * VERSION_PAGE_SIZE + VERSION_PAGE_SIZE,
+      ),
+    [reportVersionSummaries, versionPage],
+  );
+  const filteredReportRuns = useMemo(
+    () =>
+      selectedReportRelease === "all"
+        ? reportRuns
+        : reportRuns.filter((run) => run.rancherVersion === selectedReportRelease),
+    [reportRuns, selectedReportRelease],
+  );
+  const runPageCount = Math.max(
+    1,
+    Math.ceil(filteredReportRuns.length / RUN_PAGE_SIZE),
+  );
+  const pagedReportRuns = useMemo(
+    () =>
+      filteredReportRuns.slice(
+        runPage * RUN_PAGE_SIZE,
+        runPage * RUN_PAGE_SIZE + RUN_PAGE_SIZE,
+      ),
+    [filteredReportRuns, runPage],
+  );
   const selectedWorkflow = workflows.find(
     (workflow) => workflow.id === form.workflowId,
   );
@@ -96,6 +140,89 @@ export function LauncherDashboard({
 
     return buildQaseRunTitle(selectedWorkflow.label, form.rancherVersion);
   }, [form.rancherVersion, selectedWorkflow]);
+
+  useEffect(() => {
+    setReportRuns(recentRuns);
+    setReportVersionSummaries(versionSummaries);
+  }, [recentRuns, versionSummaries]);
+
+  useEffect(() => {
+    setVersionPage((current) => Math.min(current, versionPageCount - 1));
+  }, [versionPageCount]);
+
+  useEffect(() => {
+    setRunPage((current) => Math.min(current, runPageCount - 1));
+  }, [runPageCount]);
+
+  useEffect(() => {
+    if (
+      selectedReportRelease !== "all" &&
+      !releaseOptions.includes(selectedReportRelease)
+    ) {
+      setSelectedReportRelease("all");
+    }
+  }, [releaseOptions, selectedReportRelease]);
+
+  const refreshReports = useCallback(async () => {
+    setIsReportsRefreshing(true);
+
+    try {
+      const response = await fetch("/api/reports", {
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        return;
+      }
+
+      const payload = (await response.json()) as {
+        recentRuns?: WorkflowRunSummary[];
+        versionSummaries?: VersionSummary[];
+      };
+
+      setReportRuns(payload.recentRuns ?? []);
+      setReportVersionSummaries(payload.versionSummaries ?? []);
+    } finally {
+      setIsReportsRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === "reports") {
+      void refreshReports();
+    }
+  }, [activeTab, refreshReports]);
+
+  function openTab(tab: DashboardTab) {
+    if (tab === "reports" && activeTab === "reports") {
+      void refreshReports();
+    }
+
+    setActiveTab(tab);
+  }
+
+  function selectReportRelease(version: string) {
+    setSelectedReportRelease(version);
+    setRunPage(0);
+  }
+
+  function updateRancherHost(
+    field: "rancherHost" | "tenantRancherHost",
+    value: string,
+  ) {
+    setForm((current) => ({
+      ...current,
+      [field]: normalizeRancherHost(value),
+    }));
+  }
+
+  function pasteRancherHost(
+    field: "rancherHost" | "tenantRancherHost",
+    event: React.ClipboardEvent<HTMLInputElement>,
+  ) {
+    event.preventDefault();
+    updateRancherHost(field, event.clipboardData.getData("text"));
+  }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -131,6 +258,9 @@ export function LauncherDashboard({
         tenantRancherAdminToken: "",
       }));
 
+      setActiveTab("reports");
+      void refreshReports();
+      window.setTimeout(() => void refreshReports(), 3000);
       router.refresh();
     });
   }
@@ -256,7 +386,7 @@ export function LauncherDashboard({
             aria-selected={activeTab === tab}
             className={`dashboard-tab ${activeTab === tab ? "active" : ""}`}
             key={tab}
-            onClick={() => setActiveTab(tab as DashboardTab)}
+            onClick={() => openTab(tab as DashboardTab)}
             role="tab"
             type="button"
           >
@@ -365,12 +495,16 @@ export function LauncherDashboard({
                 <input
                   placeholder="https://rancher.example.com"
                   value={form.rancherHost}
+                  onBlur={(event) =>
+                    updateRancherHost("rancherHost", event.target.value)
+                  }
                   onChange={(event) =>
                     setForm((current) => ({
                       ...current,
                       rancherHost: event.target.value,
                     }))
                   }
+                  onPaste={(event) => pasteRancherHost("rancherHost", event)}
                 />
               </label>
 
@@ -400,11 +534,20 @@ export function LauncherDashboard({
                     <input
                       placeholder="https://tenant-rancher.example.com"
                       value={form.tenantRancherHost}
+                      onBlur={(event) =>
+                        updateRancherHost(
+                          "tenantRancherHost",
+                          event.target.value,
+                        )
+                      }
                       onChange={(event) =>
                         setForm((current) => ({
                           ...current,
                           tenantRancherHost: event.target.value,
                         }))
+                      }
+                      onPaste={(event) =>
+                        pasteRancherHost("tenantRancherHost", event)
                       }
                     />
                   </label>
@@ -514,12 +657,28 @@ export function LauncherDashboard({
                   by the version tag in the run title.
                 </p>
               </div>
+              <button
+                className="ghost-button"
+                disabled={isReportsRefreshing}
+                onClick={() => void refreshReports()}
+                type="button"
+              >
+                {isReportsRefreshing ? "Refreshing..." : "Refresh"}
+              </button>
             </div>
 
             <div className="stats-grid">
-              {topSummary.length > 0 ? (
-                topSummary.map((summary) => (
-                  <article className="stat-card" key={summary.version}>
+              {pagedVersionSummaries.length > 0 ? (
+                pagedVersionSummaries.map((summary) => (
+                  <button
+                    aria-pressed={selectedReportRelease === summary.version}
+                    className={`stat-card stat-card-button ${
+                      selectedReportRelease === summary.version ? "active" : ""
+                    }`}
+                    key={summary.version}
+                    onClick={() => selectReportRelease(summary.version)}
+                    type="button"
+                  >
                     <p className="small-label">Rancher</p>
                     <h4>{summary.version}</h4>
                     <p className="stat-value">{summary.passRate}%</p>
@@ -527,7 +686,7 @@ export function LauncherDashboard({
                       {summary.successfulRuns}/{summary.completedRuns} completed runs
                       passed
                     </p>
-                  </article>
+                  </button>
                 ))
               ) : (
                 <article className="stat-card">
@@ -538,6 +697,30 @@ export function LauncherDashboard({
                 </article>
               )}
             </div>
+
+            {reportVersionSummaries.length > VERSION_PAGE_SIZE ? (
+              <div className="pagination-row">
+                <button
+                  className="ghost-button"
+                  disabled={versionPage === 0}
+                  onClick={() => setVersionPage((current) => current - 1)}
+                  type="button"
+                >
+                  Previous
+                </button>
+                <span className="pagination-label">
+                  Versions {versionPage + 1} of {versionPageCount}
+                </span>
+                <button
+                  className="ghost-button"
+                  disabled={versionPage >= versionPageCount - 1}
+                  onClick={() => setVersionPage((current) => current + 1)}
+                  type="button"
+                >
+                  Next
+                </button>
+              </div>
+            ) : null}
           </section>
 
           <section className="panel">
@@ -549,11 +732,25 @@ export function LauncherDashboard({
                   Each card links back to GitHub Actions for the full job log.
                 </p>
               </div>
+              <label className="field-shell report-filter">
+                <span className="field-label">Release</span>
+                <select
+                  value={selectedReportRelease}
+                  onChange={(event) => selectReportRelease(event.target.value)}
+                >
+                  <option value="all">All releases</option>
+                  {releaseOptions.map((version) => (
+                    <option key={version} value={version}>
+                      {version}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </div>
 
             <div className="run-list">
-              {recentRuns.length > 0 ? (
-                recentRuns.map((run) => (
+              {pagedReportRuns.length > 0 ? (
+                pagedReportRuns.map((run) => (
                   <article className="run-card" key={run.id}>
                     <div className="run-card-head">
                       <div>
@@ -586,14 +783,38 @@ export function LauncherDashboard({
                 ))
               ) : (
                 <div className="empty-state">
-                  <h2>No runs yet</h2>
+                  <h2>No matching runs</h2>
                   <p>
-                    Once you queue a workflow, recent runs will appear here with a
-                    cleaner summary view than the raw Actions screen.
+                    Choose another release or refresh the report data after GitHub
+                    Actions picks up the workflow dispatch.
                   </p>
                 </div>
               )}
             </div>
+
+            {filteredReportRuns.length > RUN_PAGE_SIZE ? (
+              <div className="pagination-row">
+                <button
+                  className="ghost-button"
+                  disabled={runPage === 0}
+                  onClick={() => setRunPage((current) => current - 1)}
+                  type="button"
+                >
+                  Previous
+                </button>
+                <span className="pagination-label">
+                  Runs {runPage + 1} of {runPageCount}
+                </span>
+                <button
+                  className="ghost-button"
+                  disabled={runPage >= runPageCount - 1}
+                  onClick={() => setRunPage((current) => current + 1)}
+                  type="button"
+                >
+                  Next
+                </button>
+              </div>
+            ) : null}
           </section>
         </>
       ) : null}

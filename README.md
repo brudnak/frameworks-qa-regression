@@ -93,6 +93,7 @@ Available suites in the launcher:
 
 - Frameworks Regression
 - VAI Enabled
+- VAI Disabled
 - Charts Webhook
 - Webhook Security Settings (2.14+)
 - Hosted Tenant RBAC

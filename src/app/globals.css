@@ -668,6 +668,43 @@ html:not([data-theme="light-ranch-house"]):not([data-theme="dark-suse-green"]):n
   background: linear-gradient(180deg, var(--panel-strong), var(--surface));
 }
 
+.stat-card-button {
+  border: 1px solid transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    border-color 120ms ease,
+    transform 120ms ease;
+}
+
+.stat-card-button:hover {
+  border-color: var(--border);
+  transform: translateY(-1px);
+}
+
+.stat-card-button.active {
+  border-color: color-mix(in srgb, var(--accent) 72%, transparent);
+}
+
+.pagination-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.pagination-label {
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.report-filter {
+  min-width: 220px;
+}
+
 .countdown-card {
   margin-top: 16px;
   padding: 18px;
