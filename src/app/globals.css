@@ -687,6 +687,10 @@ html:not([data-theme="light-ranch-house"]):not([data-theme="dark-suse-green"]):n
   border-color: color-mix(in srgb, var(--accent) 72%, transparent);
 }
 
+.all-runs-card {
+  border-color: color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
 .pagination-row {
   display: flex;
   flex-wrap: wrap;

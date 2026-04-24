@@ -48,7 +48,19 @@ export const workflowDefinitions: WorkflowDefinition[] = [
 ];
 
 export function normalizeRancherVersionLabel(version: string) {
-  return version.trim().replace(/^v/i, "");
+  const tag = version.trim().split(":").pop()?.trim() ?? "";
+  const withoutPrefix = tag.replace(/^v/i, "");
+  const headMatch = withoutPrefix.match(
+    /^(\d+\.\d+)(?:[.-][a-z0-9]+)*-head(?:-(?:amd64|arm64))?$/i,
+  );
+
+  if (headMatch) {
+    return `${headMatch[1]}-head`;
+  }
+
+  const releaseMatch = withoutPrefix.match(/^(\d+\.\d+\.\d+)(?:[-+].*)?$/);
+
+  return releaseMatch ? releaseMatch[1] : withoutPrefix;
 }
 
 export function normalizeRancherHost(host: string) {

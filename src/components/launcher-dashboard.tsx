@@ -2,7 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { buildQaseRunTitle, normalizeRancherHost } from "@/lib/config";
+import {
+  buildQaseRunTitle,
+  normalizeRancherHost,
+  normalizeRancherVersionLabel,
+} from "@/lib/config";
 import type { VersionSummary, WorkflowRunSummary } from "@/lib/github";
 import type { WorkflowDefinition } from "@/lib/config";
 import type { IssueRadarDefaults } from "@/lib/issue-radar";
@@ -28,6 +32,7 @@ type DashboardTab = "launch" | "reports" | "radar" | "tools";
 
 const VERSION_PAGE_SIZE = 4;
 const RUN_PAGE_SIZE = 6;
+const TESTED_ON_NOTE_PREFIX = "Tested on:";
 
 function formatWhen(value: string) {
   return new Intl.DateTimeFormat("en-US", {
@@ -46,6 +51,27 @@ function getConclusionClass(run: WorkflowRunSummary) {
   }
 
   return "pending";
+}
+
+function withTestedOnNote(notes: string, testedVersion: string) {
+  const trimmedVersion = testedVersion.trim();
+
+  if (!trimmedVersion) {
+    return notes;
+  }
+
+  const testedOnNote = `${TESTED_ON_NOTE_PREFIX} ${trimmedVersion}`;
+  const lines = notes.split("\n");
+  const existingIndex = lines.findIndex((line) =>
+    line.trimStart().startsWith(TESTED_ON_NOTE_PREFIX),
+  );
+
+  if (existingIndex >= 0) {
+    lines[existingIndex] = testedOnNote;
+    return lines.join("\n");
+  }
+
+  return notes.trim() ? `${notes.trimEnd()}\n${testedOnNote}` : testedOnNote;
 }
 
 export function LauncherDashboard({
@@ -98,6 +124,20 @@ export function LauncherDashboard({
     () => reportVersionSummaries.map((summary) => summary.version),
     [reportVersionSummaries],
   );
+  const allRunsSummary = useMemo(() => {
+    const completedRuns = reportRuns.filter((run) => run.conclusion).length;
+    const successfulRuns = reportRuns.filter(
+      (run) => run.conclusion === "success",
+    ).length;
+
+    return {
+      completedRuns,
+      passRate:
+        completedRuns > 0 ? Math.round((successfulRuns / completedRuns) * 100) : 0,
+      successfulRuns,
+      totalRuns: reportRuns.length,
+    };
+  }, [reportRuns]);
   const versionPageCount = Math.max(
     1,
     Math.ceil(reportVersionSummaries.length / VERSION_PAGE_SIZE),
@@ -206,6 +246,24 @@ export function LauncherDashboard({
     setRunPage(0);
   }
 
+  function normalizeRancherVersion(value: string, addTestedOnNote: boolean) {
+    const originalVersion = value.trim();
+    const normalizedVersion = normalizeRancherVersionLabel(originalVersion);
+
+    setForm((current) => ({
+      ...current,
+      rancherVersion: normalizedVersion,
+      notes: addTestedOnNote
+        ? withTestedOnNote(current.notes, originalVersion)
+        : current.notes,
+    }));
+  }
+
+  function pasteRancherVersion(event: React.ClipboardEvent<HTMLInputElement>) {
+    event.preventDefault();
+    normalizeRancherVersion(event.clipboardData.getData("text"), true);
+  }
+
   function updateRancherHost(
     field: "rancherHost" | "tenantRancherHost",
     value: string,
@@ -254,8 +312,15 @@ export function LauncherDashboard({
 
       setForm((current) => ({
         ...current,
+        rancherVersion: "",
+        rancherHost: "",
         rancherAdminToken: "",
+        clusterName: "",
+        tenantRancherHost: "",
         tenantRancherAdminToken: "",
+        tenantClusterName: "",
+        notes: "",
+        reportToQase: false,
       }));
 
       setActiveTab("reports");
@@ -463,12 +528,23 @@ export function LauncherDashboard({
                 <input
                   placeholder="v2.14.0"
                   value={form.rancherVersion}
+                  onBlur={(event) => {
+                    const originalVersion = event.target.value.trim();
+                    const normalizedVersion =
+                      normalizeRancherVersionLabel(originalVersion);
+
+                    normalizeRancherVersion(
+                      originalVersion,
+                      Boolean(originalVersion && originalVersion !== normalizedVersion),
+                    );
+                  }}
                   onChange={(event) =>
                     setForm((current) => ({
                       ...current,
                       rancherVersion: event.target.value,
                     }))
                   }
+                  onPaste={pasteRancherVersion}
                 />
               </label>
 
@@ -668,26 +744,45 @@ export function LauncherDashboard({
             </div>
 
             <div className="stats-grid">
-              {pagedVersionSummaries.length > 0 ? (
-                pagedVersionSummaries.map((summary) => (
+              {reportRuns.length > 0 ? (
+                <>
                   <button
-                    aria-pressed={selectedReportRelease === summary.version}
-                    className={`stat-card stat-card-button ${
-                      selectedReportRelease === summary.version ? "active" : ""
+                    aria-pressed={selectedReportRelease === "all"}
+                    className={`stat-card stat-card-button all-runs-card ${
+                      selectedReportRelease === "all" ? "active" : ""
                     }`}
-                    key={summary.version}
-                    onClick={() => selectReportRelease(summary.version)}
+                    onClick={() => selectReportRelease("all")}
                     type="button"
                   >
-                    <p className="small-label">Rancher</p>
-                    <h4>{summary.version}</h4>
-                    <p className="stat-value">{summary.passRate}%</p>
+                    <p className="small-label">All Recent Runs</p>
+                    <h4>All releases</h4>
+                    <p className="stat-value">{allRunsSummary.passRate}%</p>
                     <p className="stat-meta">
-                      {summary.successfulRuns}/{summary.completedRuns} completed runs
-                      passed
+                      {allRunsSummary.successfulRuns}/{allRunsSummary.completedRuns} completed
+                      runs passed
                     </p>
                   </button>
-                ))
+
+                  {pagedVersionSummaries.map((summary) => (
+                    <button
+                      aria-pressed={selectedReportRelease === summary.version}
+                      className={`stat-card stat-card-button ${
+                        selectedReportRelease === summary.version ? "active" : ""
+                      }`}
+                      key={summary.version}
+                      onClick={() => selectReportRelease(summary.version)}
+                      type="button"
+                    >
+                      <p className="small-label">Rancher</p>
+                      <h4>{summary.version}</h4>
+                      <p className="stat-value">{summary.passRate}%</p>
+                      <p className="stat-meta">
+                        {summary.successfulRuns}/{summary.completedRuns} completed runs
+                        passed
+                      </p>
+                    </button>
+                  ))}
+                </>
               ) : (
                 <article className="stat-card">
                   <p className="small-label">No data yet</p>
@@ -768,6 +863,10 @@ export function LauncherDashboard({
                     <div className="badge-row">
                       {run.rancherVersion ? (
                         <span className="badge">rv:{run.rancherVersion}</span>
+                      ) : null}
+                      {run.rawRancherVersion &&
+                      run.rawRancherVersion !== run.rancherVersion ? (
+                        <span className="badge">raw:{run.rawRancherVersion}</span>
                       ) : null}
                       {run.profile ? <span className="badge">profile:{run.profile}</span> : null}
                       {run.workflowId ? (

@@ -15,6 +15,26 @@ describe("normalizeRancherVersionLabel", () => {
   it("preserves versions that do not start with v", () => {
     expect(normalizeRancherVersionLabel("2.14.1")).toBe("2.14.1");
   });
+
+  it("strips prerelease suffixes from release versions", () => {
+    expect(normalizeRancherVersionLabel("v2.11.13-alpha4")).toBe("2.11.13");
+  });
+
+  it("normalizes commit-qualified head image tags to their release line", () => {
+    expect(
+      normalizeRancherVersionLabel(
+        "v2.14-490aaa24b767548d9256bd46580f4a96f587a086-head",
+      ),
+    ).toBe("2.14-head");
+  });
+
+  it("normalizes architecture-qualified head image tags", () => {
+    expect(
+      normalizeRancherVersionLabel(
+        "rancher/rancher:v2.15-180f4f6fc32c48ba1b807dd9f0343e3bd272a09c-head-arm64",
+      ),
+    ).toBe("2.15-head");
+  });
 });
 
 describe("normalizeRancherHost", () => {

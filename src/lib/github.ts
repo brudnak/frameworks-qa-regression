@@ -2,6 +2,7 @@ import sodium from "libsodium-wrappers";
 import {
   getIssueRadarDefaults,
   getProfiles,
+  normalizeRancherVersionLabel,
   requireGitHubRepoConfig,
   workflowDefinitions,
   type WorkflowDefinition,
@@ -21,6 +22,7 @@ export type WorkflowRunSummary = {
   branch: string;
   profile: string | null;
   rancherVersion: string | null;
+  rawRancherVersion: string | null;
 };
 
 export type VersionSummary = {
@@ -103,6 +105,7 @@ function parseTaggedValue(title: string, key: string): string | null {
 
 function mapRunToSummary(run: GitHubWorkflowRun): WorkflowRunSummary {
   const title = run.display_title ?? run.name ?? run.workflow_name ?? "Workflow run";
+  const rawRancherVersion = parseTaggedValue(title, "rv");
 
   return {
     id: run.id,
@@ -117,7 +120,10 @@ function mapRunToSummary(run: GitHubWorkflowRun): WorkflowRunSummary {
     actor: run.actor?.login ?? "unknown",
     branch: run.head_branch,
     profile: parseTaggedValue(title, "profile"),
-    rancherVersion: parseTaggedValue(title, "rv"),
+    rancherVersion: rawRancherVersion
+      ? normalizeRancherVersionLabel(rawRancherVersion)
+      : null,
+    rawRancherVersion,
   };
 }
 

@@ -6,6 +6,7 @@ import {
   buildQaseRunTitle,
   getProfiles,
   normalizeRancherHost,
+  normalizeRancherVersionLabel,
   workflowDefinitions,
 } from "@/lib/config";
 import {
@@ -58,7 +59,9 @@ export async function POST(request: Request) {
     return badRequest("Choose one of the configured GitHub environment profiles.");
   }
 
-  if (!body.rancherVersion?.trim()) {
+  const rancherVersion = normalizeRancherVersionLabel(body.rancherVersion ?? "");
+
+  if (!rancherVersion) {
     return badRequest("Rancher version is required.");
   }
 
@@ -136,16 +139,16 @@ export async function POST(request: Request) {
   await dispatchWorkflowRun({
     workflowId: workflow.id,
     profile: body.profile,
-    rancherVersion: body.rancherVersion.trim(),
+    rancherVersion,
     notes: body.notes?.trim(),
     reportToQase: body.reportToQase,
     qaseRunTitle: body.reportToQase
-      ? buildQaseRunTitle(workflow.label, body.rancherVersion.trim())
+      ? buildQaseRunTitle(workflow.label, rancherVersion)
       : undefined,
   });
 
   return NextResponse.json({
     ok: true,
-    message: `Queued ${workflow.label} for ${body.rancherVersion.trim()} on ${body.profile}.`,
+    message: `Queued ${workflow.label} for ${rancherVersion} on ${body.profile}.`,
   });
 }
