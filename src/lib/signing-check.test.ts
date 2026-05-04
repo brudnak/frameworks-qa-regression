@@ -93,6 +93,19 @@ describe("normalizeTagList", () => {
       ]),
     ).toEqual(["v0.10.0-rc.11", "v0.9.10", "v0.9.3", "v0.9.2"]);
   });
+
+  it("keeps numeric semver tags even without a leading v", () => {
+    expect(
+      normalizeTagList([
+        "latest",
+        "9.3.0",
+        "9.10.0-rc.1",
+        "foo",
+        "v0.9.3",
+        "0.9.4",
+      ]),
+    ).toEqual(["v0.9.3", "9.10.0-rc.1", "9.3.0", "0.9.4"]);
+  });
 });
 
 describe("describeBundleDescriptor", () => {

@@ -221,8 +221,10 @@ export function buildSimpleSigningPayloadCandidates(
 }
 
 export function normalizeTagList(tags: string[], limit = 20) {
+  const isVersionLikeTag = (tag: string) => /^v?\d+\.\d+/i.test(tag);
+
   return [...new Set(tags)]
-    .filter((tag) => tag && tag !== "latest" && tag.startsWith("v"))
+    .filter((tag) => tag && tag !== "latest" && isVersionLikeTag(tag))
     .sort((left, right) =>
       right.localeCompare(left, undefined, {
         numeric: true,

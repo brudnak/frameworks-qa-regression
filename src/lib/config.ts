@@ -142,7 +142,7 @@ export function getIssueRadarDefaults() {
       process.env.ISSUE_RADAR_LABEL ??
       process.env.DEFAULT_TARGET_LABEL ??
       "team/frameworks",
-    users: users.length > 0 ? users : ["brudnak", "fillipehmeireles"],
+    users: users.length > 0 ? users : [""],
   };
 }
 

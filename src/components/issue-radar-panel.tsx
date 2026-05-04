@@ -27,8 +27,7 @@ function parseLocalDate(value: string) {
 }
 
 export function IssueRadarPanel({ defaults }: IssueRadarPanelProps) {
-  const defaultUsers =
-    defaults.users.length > 0 ? defaults.users : ["brudnak", "fillipehmeireles"];
+  const defaultUsers = defaults.users.length > 0 ? defaults.users : [""];
   const [isPending, startTransition] = useTransition();
   const [banner, setBanner] = useState<BannerState>(null);
   const [report, setReport] = useState<IssueRadarReport | null>(null);
@@ -251,10 +250,7 @@ export function IssueRadarPanel({ defaults }: IssueRadarPanelProps) {
       users:
         current.users.length >= 8
           ? current.users
-          : [
-              ...current.users,
-              defaultUsers.find((user) => !current.users.includes(user)) ?? "",
-            ],
+          : [...current.users, ""],
     }));
   }
 
@@ -393,7 +389,7 @@ export function IssueRadarPanel({ defaults }: IssueRadarPanelProps) {
               <span className="field-label">Selected Owners</span>
               <div className="owner-list">
                 {form.users.map((user, index) => (
-                  <div className="owner-row" key={`${index}-${user}`}>
+                  <div className="owner-row" key={`owner-${index}`}>
                     <input
                       placeholder="GitHub login"
                       value={user}

@@ -53,6 +53,19 @@ function getConclusionClass(run: WorkflowRunSummary) {
   return "pending";
 }
 
+function getSigningRegistryLabel(registry: string) {
+  switch (registry) {
+    case "docker.io":
+      return "Docker Hub";
+    case "registry.suse.com":
+      return "Rancher Prime Registry";
+    case "stgregistry.suse.com":
+      return "Rancher Staging Registry";
+    default:
+      return registry;
+  }
+}
+
 function withTestedOnNote(notes: string, testedVersion: string) {
   const trimmedVersion = testedVersion.trim();
 
@@ -370,6 +383,7 @@ export function LauncherDashboard({
   async function handleLoadSigningTags() {
     const registry = signingForm.registry;
     const imageKey = signingForm.imageKey;
+    const registryLabel = getSigningRegistryLabel(registry);
 
     setTagBanner(null);
 
@@ -405,8 +419,8 @@ export function LauncherDashboard({
         kind: "success",
         message:
           tags.length > 0
-            ? `Loaded ${tags.length} recent tags from ${registry}.`
-            : `No recent version tags were returned from ${registry}.`,
+            ? `Loaded ${tags.length} recent tags from ${registryLabel}.`
+            : `No recent version tags were returned from ${registryLabel}.`,
       });
 
       if (!signingForm.version && tags[0]) {
@@ -930,7 +944,7 @@ export function LauncherDashboard({
                 <p className="field-help">
                   This uses a native TypeScript Sigstore verifier, so it can run on
                   Vercel too. Private registries can still need optional server-side
-                  credentials.
+                  credentials. It checks one registry at a time.
                 </p>
               </div>
             </div>
@@ -958,7 +972,7 @@ export function LauncherDashboard({
                 <label className="field-shell">
                   <span className="field-label">Version</span>
                   <input
-                    placeholder="v0.7.0"
+                    placeholder="v0.9.3 or 9.3.0"
                     value={signingForm.version}
                     onChange={(event) =>
                       setSigningForm((current) => ({
@@ -984,9 +998,9 @@ export function LauncherDashboard({
                     }}
                   >
                     <option value="docker.io">Docker Hub</option>
-                    <option value="registry.suse.com">registry.suse.com (prime)</option>
+                    <option value="registry.suse.com">Rancher Prime Registry</option>
                     <option value="stgregistry.suse.com">
-                      stgregistry.suse.com (staging)
+                      Rancher Staging Registry
                     </option>
                   </select>
                 </label>
@@ -1031,6 +1045,7 @@ export function LauncherDashboard({
                   </div>
                   <span className="field-help">
                     The selected registry is both the tag source and the verification target.
+                    Switch registries to compare where a tag exists.
                   </span>
                 </div>
               </div>
