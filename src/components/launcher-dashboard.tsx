@@ -33,6 +33,8 @@ type DashboardTab = "launch" | "reports" | "radar" | "tools";
 const VERSION_PAGE_SIZE = 4;
 const RUN_PAGE_SIZE = 6;
 const TESTED_ON_NOTE_PREFIX = "Tested on:";
+const SLSACTL_REPO_URL = "https://github.com/rancherlabs/slsactl";
+const PINNED_SLSACTL_VERSION = "v0.1.31";
 
 function formatWhen(value: string) {
   return new Intl.DateTimeFormat("en-US", {
@@ -942,9 +944,12 @@ export function LauncherDashboard({
                 <p className="section-label">Signing Check</p>
                 <h3 className="panel-title">Check Rancher image signing</h3>
                 <p className="field-help">
-                  This uses a native TypeScript Sigstore verifier, so it can run on
-                  Vercel too. Private registries can still need optional server-side
-                  credentials. It checks one registry at a time.
+                  This runs{" "}
+                  <a href={SLSACTL_REPO_URL} rel="noreferrer" target="_blank">
+                    slsactl
+                  </a>{" "}
+                  verify and SBOM download checks from Vercel. The deployment is
+                  pinned to {PINNED_SLSACTL_VERSION}. It checks one registry at a time.
                 </p>
               </div>
             </div>

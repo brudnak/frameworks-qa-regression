@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildSimpleSigningPayloadCandidates,
+  buildSlsactlCertificateIdentity,
   describeBundleDescriptor,
   normalizeTagList,
   parseAuthenticateHeader,
@@ -105,6 +106,26 @@ describe("normalizeTagList", () => {
         "0.9.4",
       ]),
     ).toEqual(["v0.9.3", "9.10.0-rc.1", "9.3.0", "0.9.4"]);
+  });
+});
+
+describe("buildSlsactlCertificateIdentity", () => {
+  it("uses the slsactl webhook identity override", () => {
+    expect(buildSlsactlCertificateIdentity("webhook", "v0.8.5")).toBe(
+      "^https://github.com/rancher/webhook/.github/workflows/release.ya?ml@refs/tags/v",
+    );
+  });
+
+  it("builds the slsactl GHA release workflow identity for remotedialer-proxy", () => {
+    expect(buildSlsactlCertificateIdentity("rdp", "v0.5.0")).toBe(
+      "^https://github.com/rancher/remotedialer-proxy/.github/workflows/release.(yml|yaml)@refs/tags/v0.5.0$",
+    );
+  });
+
+  it("trims slsactl architecture suffixes before matching the RDP release tag", () => {
+    expect(buildSlsactlCertificateIdentity("rdp", "v0.5.0-linux-amd64")).toBe(
+      "^https://github.com/rancher/remotedialer-proxy/.github/workflows/release.(yml|yaml)@refs/tags/v0.5.0$",
+    );
   });
 });
 

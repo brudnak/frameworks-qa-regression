@@ -11,6 +11,7 @@ type SigningCheckRequest = {
 };
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 function badRequest(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status });

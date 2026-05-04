@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "node scripts/install-slsactl.mjs && next build",
+    "install:slsactl": "INSTALL_SLSACTL=1 node scripts/install-slsactl.mjs",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run"

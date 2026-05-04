@@ -1,4 +1,5 @@
 import { mkdir } from "node:fs/promises";
+import { execFile } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
 import { getRegistryCredentials } from "@sigstore/oci";
@@ -15,6 +16,10 @@ const SPDX_PREDICATE_TYPE = "https://spdx.dev/Document";
 const COSIGN_SIGN_PREDICATE_TYPE = "https://sigstore.dev/cosign/sign/v1";
 const SLSA_PROVENANCE_PREDICATE_TYPE = "https://slsa.dev/provenance/v1";
 const SBOM_ATTACHMENT_SUFFIX = "sbom";
+const SLSACTL_VERSION = process.env.SLSACTL_VERSION || "v0.1.31";
+const SLSACTL_DEFAULT_PATH = path.join(process.cwd(), "bin", "slsactl");
+const SLSACTL_TIMEOUT_MS = 45_000;
+const SLSACTL_SBOM_MAX_BUFFER = 25 * 1024 * 1024;
 const SBOM_MEDIA_TYPES = new Set([
   "text/spdx",
   "text/spdx+json",
@@ -24,6 +29,21 @@ const SBOM_MEDIA_TYPES = new Set([
   "application/vnd.cyclonedx+xml",
   "application/vnd.syft+json",
 ]);
+const SLSACTL_WEBHOOK_CERT_IDENTITY =
+  "^https://github.com/rancher/webhook/.github/workflows/release.ya?ml@refs/tags/v";
+const SLSACTL_ARCH_SUFFIXES = [
+  "-linux-amd64",
+  "-linux-arm64",
+  "-windows-amd64",
+  "-windows-arm64",
+  "-windows-ltsc2022-amd64",
+  "-windows-ltsc2022-arm64",
+  "-windows-1809-amd64",
+  "-windows-1809-arm64",
+  "-amd64",
+  "-arm64",
+  "-s390x",
+];
 
 type ImageKey = "webhook" | "rdp";
 
@@ -63,6 +83,13 @@ type RegistryCheckResult = {
   sbom: VerificationStatus;
 };
 
+type SlsactlResult = {
+  ok: boolean;
+  stdout: string;
+  stderr: string;
+  error?: string;
+};
+
 type Challenge = {
   scheme: "basic" | "bearer";
   realm?: string;
@@ -95,17 +122,14 @@ type OCIManifest = {
   }>;
 };
 
-const IMAGE_CATALOG: Record<
-  ImageKey,
-  { image: string; identity: string }
-> = {
+const IMAGE_CATALOG: Record<ImageKey, { image: string; sourceRepository: string }> = {
   webhook: {
     image: "rancher/rancher-webhook",
-    identity: "https://github.com/rancher/webhook",
+    sourceRepository: "rancher/webhook",
   },
   rdp: {
     image: "rancher/remotedialer-proxy",
-    identity: "https://github.com/rancher/remotedialer-proxy",
+    sourceRepository: "rancher/remotedialer-proxy",
   },
 };
 
@@ -234,6 +258,32 @@ export function normalizeTagList(tags: string[], limit = 20) {
     .slice(0, limit);
 }
 
+function trimSlsactlArchSuffixes(ref: string) {
+  let normalized = ref;
+
+  for (const suffix of SLSACTL_ARCH_SUFFIXES) {
+    normalized = normalized.endsWith(suffix)
+      ? normalized.slice(0, -suffix.length)
+      : normalized;
+  }
+
+  return normalized;
+}
+
+export function buildSlsactlCertificateIdentity(
+  imageKey: ImageKey,
+  version: string,
+) {
+  if (imageKey === "webhook") {
+    return SLSACTL_WEBHOOK_CERT_IDENTITY;
+  }
+
+  const image = IMAGE_CATALOG[imageKey];
+  const ref = trimSlsactlArchSuffixes(version);
+
+  return `^https://github.com/${image.sourceRepository}/.github/workflows/release.(yml|yaml)@refs/tags/${ref}$`;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
@@ -336,12 +386,12 @@ function cleanDetail(value: string) {
   return value.replace(/\s+/g, " ").trim();
 }
 
-async function getSigstoreVerifyOptions(identity: string) {
+async function getSigstoreVerifyOptions(certificateIdentity: string) {
   await mkdir(SIGSTORE_TUF_CACHE_PATH, { recursive: true });
 
   return {
     certificateIssuer: OIDC_ISSUER,
-    certificateIdentityURI: identity,
+    certificateIdentityURI: certificateIdentity,
     tufCachePath: SIGSTORE_TUF_CACHE_PATH,
   } as const;
 }
@@ -1018,6 +1068,7 @@ async function checkRegistry(
   version: string,
 ): Promise<RegistryCheckResult> {
   const image = IMAGE_CATALOG[imageKey];
+  const certificateIdentity = buildSlsactlCertificateIdentity(imageKey, version);
   const reference = `${registry}/${image.image}:${version}`;
   const client = new RegistryClient(
     registry,
@@ -1057,12 +1108,12 @@ async function checkRegistry(
     predicateType?: string;
   }>;
 
-  result.signature = await verifySignatureBundles(loadedBundles, image.identity);
-  result.sbom = await verifySbomBundles(loadedBundles, image.identity);
+  result.signature = await verifySignatureBundles(loadedBundles, certificateIdentity);
+  result.sbom = await verifySbomBundles(loadedBundles, certificateIdentity);
 
   const messageSignatureFailure = await verifyMessageSignatureBundles(
     loadedBundles,
-    image.identity,
+    certificateIdentity,
     imageManifest.digest,
     image.image,
     registry,
@@ -1157,8 +1208,136 @@ function isResolveErrorMessage(message: string) {
   return message.includes("Unable to resolve") && message.includes("to a digest");
 }
 
-export async function runSigningCheck(options: SigningCheckOptions) {
+function resolveSlsactlPath() {
+  return process.env.SLSACTL_PATH?.trim() || SLSACTL_DEFAULT_PATH;
+}
+
+async function runSlsactl(args: string[], maxBuffer = 1024 * 1024) {
+  const cachePath = path.join(os.tmpdir(), ".cache");
+  await mkdir(cachePath, { recursive: true });
+
+  return new Promise<SlsactlResult>((resolve) => {
+    execFile(resolveSlsactlPath(), args, {
+      env: {
+        ...process.env,
+        HOME: os.tmpdir(),
+        XDG_CACHE_HOME: cachePath,
+        LANDLOCK_MODE: process.env.LANDLOCK_MODE ?? "off",
+      },
+      maxBuffer,
+      timeout: SLSACTL_TIMEOUT_MS,
+    }, (error, stdout, stderr) => {
+      if (!error) {
+        resolve({ ok: true, stdout, stderr });
+        return;
+      }
+
+      const nodeError = error as NodeJS.ErrnoException;
+      const missingBinary =
+        nodeError.code === "ENOENT"
+          ? `slsactl was not found at ${resolveSlsactlPath()}. Set SLSACTL_PATH or run the Vercel build installer.`
+          : undefined;
+
+      resolve({
+        ok: false,
+        stdout,
+        stderr,
+        error: missingBinary ?? cleanDetail(error.message),
+      });
+    });
+  });
+}
+
+function appendCommandOutput(lines: string[], result: SlsactlResult) {
+  if (result.stdout.trim()) {
+    lines.push(result.stdout.trim());
+  }
+
+  if (result.stderr.trim()) {
+    lines.push(result.stderr.trim());
+  }
+
+  if (result.error) {
+    lines.push(result.error);
+  }
+}
+
+function describeSbom(stdout: string) {
+  const bytes = Buffer.byteLength(stdout, "utf8");
+
+  try {
+    const payload = JSON.parse(stdout) as Record<string, unknown>;
+
+    if (typeof payload.SPDXID === "string" || typeof payload.spdxVersion === "string") {
+      return `SPDX JSON extracted (${bytes.toLocaleString()} bytes).`;
+    }
+
+    if (typeof payload.bomFormat === "string") {
+      return `${payload.bomFormat} JSON extracted (${bytes.toLocaleString()} bytes).`;
+    }
+  } catch {
+    // slsactl success is enough for this check; JSON detection only improves the label.
+  }
+
+  return `SBOM extracted (${bytes.toLocaleString()} bytes).`;
+}
+
+async function runSlsactlSigningCheck(options: SigningCheckOptions) {
   const image = IMAGE_CATALOG[options.imageKey];
+  const reference = `${options.registry}/${image.image}:${options.version}`;
+  const certificateIdentity = buildSlsactlCertificateIdentity(
+    options.imageKey,
+    options.version,
+  );
+  const output = [
+    "Rancher image signing check",
+    "",
+    `Image: ${image.image}`,
+    `Version: ${options.version}`,
+    `Reference: ${reference}`,
+    `Verifier: slsactl ${SLSACTL_VERSION} (${resolveSlsactlPath()})`,
+    `slsactl identity match: ${certificateIdentity}`,
+    "",
+  ];
+
+  const verify = await runSlsactl(["verify", reference]);
+  output.push(`[check] slsactl verify ${reference}`);
+  output.push(
+    verify.ok
+      ? "[pass] signature: slsactl verify passed."
+      : "[fail] signature: slsactl verify failed.",
+  );
+  appendCommandOutput(output, verify);
+  output.push("");
+
+  const sbom = await runSlsactl(
+    ["download", "sbom", "--platform", "linux/amd64", reference],
+    SLSACTL_SBOM_MAX_BUFFER,
+  );
+  output.push(`[check] slsactl download sbom --platform linux/amd64 ${reference}`);
+  output.push(
+    sbom.ok
+      ? `[pass] sbom: ${describeSbom(sbom.stdout)}`
+      : "[fail] sbom: slsactl download sbom failed.",
+  );
+
+  if (!sbom.ok) {
+    appendCommandOutput(output, sbom);
+  }
+
+  return output.join("\n").trim();
+}
+
+export async function runSigningCheck(options: SigningCheckOptions) {
+  return await runSlsactlSigningCheck(options);
+}
+
+export async function runJsSigningCheck(options: SigningCheckOptions) {
+  const image = IMAGE_CATALOG[options.imageKey];
+  const certificateIdentity = buildSlsactlCertificateIdentity(
+    options.imageKey,
+    options.version,
+  );
   const registries: RegistryName[] = [options.registry];
 
   const output = [
@@ -1166,7 +1345,7 @@ export async function runSigningCheck(options: SigningCheckOptions) {
     "",
     `Image: ${image.image}`,
     `Version: ${options.version}`,
-    `Identity match: ${image.identity}`,
+    `slsactl identity match: ${certificateIdentity}`,
     "",
   ];
 
