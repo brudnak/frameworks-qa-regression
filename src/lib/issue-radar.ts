@@ -404,7 +404,7 @@ function formatIssueLine(issue: IssueSummary) {
 
 function formatHistoryLine(issue: IssueHistorySample) {
   const labels = issue.labels.length > 0 ? issue.labels.join(", ") : "None";
-  return `- #${issue.number} ${issue.title}\n  Closed: ${issue.closedAt}\n  Labels: ${labels}\n  Snippet: ${issue.snippet}`;
+  return `- #${issue.number} ${issue.title}\n  Link: ${issue.url}\n  Closed: ${issue.closedAt}\n  Labels: ${labels}\n  Snippet: ${issue.snippet}`;
 }
 
 function buildHistorySamples(issues: GitHubIssue[]) {

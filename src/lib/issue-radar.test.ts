@@ -130,6 +130,7 @@ describe("buildIssueRadarReport", () => {
 
     expect(brief).toContain("Recent closed issue samples by owner (last 30)");
     expect(brief).toContain("brudnak (1)");
+    expect(brief).toContain("Link: https://github.com/rancher/rancher/issues/88");
     expect(brief).toContain("Snippet: Fixes an older frameworks-related bug.");
   });
 });
