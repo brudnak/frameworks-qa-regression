@@ -1,5 +1,13 @@
-import { describe, expect, it } from "vitest";
-import { buildIssueRadarBriefText, buildIssueRadarReport } from "./issue-radar";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  buildIssueRadarBriefText,
+  buildIssueRadarReport,
+  generateIssueRadarBrief,
+} from "./issue-radar";
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe("buildIssueRadarReport", () => {
   it("splits issues into single-owner, over-assigned, missing-owner, and QA/None lanes", () => {
@@ -88,6 +96,7 @@ describe("buildIssueRadarReport", () => {
     expect(brief).toContain("Assignment review brief");
     expect(brief).toContain("Code freeze: Apr 1, 2026");
     expect(brief).toContain("Missing a selected owner (1)");
+    expect(brief).toContain("Link: https://github.com/rancher/rancher/issues/102");
     expect(brief).toContain("Clean owner lanes");
     expect(brief).not.toContain("Recent closed issue samples by owner");
   });
@@ -132,5 +141,88 @@ describe("buildIssueRadarReport", () => {
     expect(brief).toContain("brudnak (1)");
     expect(brief).toContain("Link: https://github.com/rancher/rancher/issues/88");
     expect(brief).toContain("Snippet: Fixes an older frameworks-related bug.");
+  });
+
+  it("builds a history brief when one selected owner has no closed team-label history", async () => {
+    const requestedUrls: string[] = [];
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = new URL(
+          typeof input === "string"
+            ? input
+            : input instanceof URL
+              ? input.toString()
+              : input.url,
+        );
+        requestedUrls.push(url.toString());
+
+        if (url.pathname === "/repos/rancher/rancher/milestones") {
+          return Response.json([{ number: 9, title: "v2.14.0" }]);
+        }
+
+        if (url.pathname === "/repos/rancher/rancher/issues") {
+          const state = url.searchParams.get("state");
+          const assignee = url.searchParams.get("assignee");
+
+          if (state === "open") {
+            return Response.json([
+              {
+                number: 101,
+                title: "Needs owner",
+                html_url: "https://github.com/rancher/rancher/issues/101",
+                labels: [{ name: "QA/M" }, { name: "kind/bug" }],
+                assignees: [],
+              },
+            ]);
+          }
+
+          if (state === "closed" && assignee === "brudnak") {
+            return Response.json([
+              {
+                number: 88,
+                title: "Older issue",
+                html_url: "https://github.com/rancher/rancher/issues/88",
+                body: "Fixes an older frameworks-related bug.",
+                closed_at: "2026-03-20T12:00:00Z",
+                labels: [{ name: "team/frameworks" }],
+                assignees: [{ login: "brudnak" }],
+              },
+            ]);
+          }
+
+          if (state === "closed" && assignee === "Josh-Diamond") {
+            return Response.json({ message: "Validation Failed" }, { status: 422 });
+          }
+        }
+
+        return Response.json({ message: "Unexpected request" }, { status: 500 });
+      }),
+    );
+
+    const result = await generateIssueRadarBrief({
+      milestone: "v2.14.0",
+      repo: "rancher/rancher",
+      label: "team/frameworks",
+      users: ["brudnak", "Josh-Diamond"],
+      includeHistory: true,
+      historyLimit: 30,
+    });
+
+    expect(result.brief.text).toContain("Missing a selected owner (1)");
+    expect(result.brief.text).toContain("Link: https://github.com/rancher/rancher/issues/101");
+    expect(result.brief.text).toContain("brudnak (1)");
+    expect(result.brief.text).toContain("Josh-Diamond (0)");
+    expect(result.brief.text).toContain("- None collected.");
+    expect(
+      requestedUrls.some((url) => {
+        const parsed = new URL(url);
+        return (
+          parsed.searchParams.get("state") === "closed" &&
+          parsed.searchParams.get("labels") === "team/frameworks"
+        );
+      }),
+    ).toBe(true);
   });
 });

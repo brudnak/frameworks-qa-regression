@@ -31,6 +31,16 @@ type GitHubError = {
   message?: string;
 };
 
+class GitHubApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = "GitHubApiError";
+  }
+}
+
 export type IssueRadarDefaults = ReturnType<typeof getIssueRadarDefaults>;
 
 export type IssueRadarConfig = {
@@ -201,7 +211,7 @@ async function githubRequest<T>(
     const message =
       body?.message ||
       `GitHub API request failed with status ${response.status}.`;
-    throw new Error(message);
+    throw new GitHubApiError(message, response.status);
   }
 
   return (await response.json()) as T;
@@ -285,31 +295,40 @@ async function fetchClosedIssuesForUser(
   const token = resolveGitHubToken(config.token);
   const issues: GitHubIssue[] = [];
 
-  for (let page = 1; issues.length < limit; page += 1) {
-    const pageIssues = await githubRequest<GitHubIssue[]>(
-      `/repos/${owner}/${repo}/issues`,
-      {
-        query: new URLSearchParams({
-          state: "closed",
-          assignee: user,
-          sort: "updated",
-          direction: "desc",
-          per_page: "100",
-          page: String(page),
-        }),
-        token,
-      },
-    );
+  try {
+    for (let page = 1; issues.length < limit; page += 1) {
+      const pageIssues = await githubRequest<GitHubIssue[]>(
+        `/repos/${owner}/${repo}/issues`,
+        {
+          query: new URLSearchParams({
+            state: "closed",
+            labels: config.label,
+            assignee: user,
+            sort: "updated",
+            direction: "desc",
+            per_page: "100",
+            page: String(page),
+          }),
+          token,
+        },
+      );
 
-    issues.push(
-      ...pageIssues.filter(
-        (issue) => !issue.pull_request && typeof issue.closed_at === "string",
-      ),
-    );
+      issues.push(
+        ...pageIssues.filter(
+          (issue) => !issue.pull_request && typeof issue.closed_at === "string",
+        ),
+      );
 
-    if (pageIssues.length < 100) {
-      break;
+      if (pageIssues.length < 100) {
+        break;
+      }
     }
+  } catch (error) {
+    if (error instanceof GitHubApiError && error.status === 422) {
+      return [];
+    }
+
+    throw error;
   }
 
   return issues
@@ -399,7 +418,7 @@ function determineKind(labels: string[]) {
 
 function formatIssueLine(issue: IssueSummary) {
   const labels = [issue.qaSize, issue.kind].join(", ");
-  return `- #${issue.number} ${issue.title}\n  Owners: ${issue.assignees.join(", ")}\n  Labels: ${labels}`;
+  return `- #${issue.number} ${issue.title}\n  Link: ${issue.url}\n  Owners: ${issue.assignees.join(", ")}\n  Labels: ${labels}`;
 }
 
 function formatHistoryLine(issue: IssueHistorySample) {
