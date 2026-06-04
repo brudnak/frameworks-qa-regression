@@ -598,6 +598,41 @@ html:not([data-theme="light-ranch-house"]):not([data-theme="dark-suse-green"]):n
   line-height: 1.55;
 }
 
+.test-plan-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.8fr) minmax(0, 1.2fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.test-plan-form,
+.test-plan-output-shell {
+  display: grid;
+  gap: 14px;
+}
+
+.test-plan-input {
+  min-height: 340px !important;
+}
+
+.test-plan-output-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+}
+
+.test-plan-output-header .field-label,
+.test-plan-output-header .field-help {
+  margin: 0;
+}
+
+.test-plan-output {
+  min-height: 500px;
+  max-height: 680px;
+  margin: 0;
+}
+
 .field-shell input,
 .field-shell select,
 .field-shell textarea {
@@ -1041,6 +1076,10 @@ html:not([data-theme="light-ranch-house"]):not([data-theme="dark-suse-green"]):n
   }
 
   .signing-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .test-plan-grid {
     grid-template-columns: 1fr;
   }
 

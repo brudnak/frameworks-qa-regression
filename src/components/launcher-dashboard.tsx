@@ -11,6 +11,7 @@ import type { VersionSummary, WorkflowRunSummary } from "@/lib/github";
 import type { WorkflowDefinition } from "@/lib/config";
 import type { IssueRadarDefaults } from "@/lib/issue-radar";
 import { IssueRadarPanel } from "@/components/issue-radar-panel";
+import { TestPlanGeneratorPanel } from "@/components/test-plan-generator-panel";
 
 type DashboardProps = {
   login?: string;
@@ -28,7 +29,7 @@ type BannerState =
   | { kind: "error"; message: string }
   | null;
 
-type DashboardTab = "launch" | "reports" | "radar" | "tools";
+type DashboardTab = "launch" | "reports" | "radar" | "test-plan" | "tools";
 
 const VERSION_PAGE_SIZE = 4;
 const RUN_PAGE_SIZE = 6;
@@ -461,6 +462,7 @@ export function LauncherDashboard({
           ["launch", "Launch QA"],
           ["reports", "QA Reports"],
           ["radar", "Issue Radar"],
+          ["test-plan", "Test Plan"],
           ["tools", "Tools"],
         ].map(([tab, label]) => (
           <button
@@ -935,6 +937,8 @@ export function LauncherDashboard({
       ) : null}
 
       {activeTab === "radar" ? <IssueRadarPanel defaults={issueRadarDefaults} /> : null}
+
+      {activeTab === "test-plan" ? <TestPlanGeneratorPanel /> : null}
 
       {activeTab === "tools" ? (
         <div className="tools-grid">
